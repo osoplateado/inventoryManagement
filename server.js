@@ -15,6 +15,10 @@ const db = new sqlite3.Database(dbPath, (err) => {
 app.use(express.json());
 app.use(express.static(__dirname));
 
+app.get('/inventory', (req, res) => {
+  res.sendFile(path.join(__dirname, 'inventory.html'));
+});
+
 function initializeDatabase() {
   db.serialize(() => {
     db.run(`
