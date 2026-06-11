@@ -108,7 +108,7 @@ async function initializeDatabase() {
     for (const record of sampleRecords) {
       await runStatement(
         `INSERT INTO containers (
-          id, vendor, location, size, type, condition,
+          id, vendor, location, size, type, \`condition\`,
           color, quantity, price, delivery, date, notes
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
@@ -166,7 +166,7 @@ app.post('/api/containers', async (req, res) => {
   try {
     await runStatement(
       `INSERT INTO containers (
-        id, vendor, location, size, type, condition,
+        id, vendor, location, size, type, \`condition\`,
         color, quantity, price, delivery, date, notes
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
