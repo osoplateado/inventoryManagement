@@ -43,7 +43,6 @@ async function initializeMySQL() {
     DB_USER: config.user,
     DB_NAME: config.database,
     DB_PORT: config.port,
-    password: config.passsword,
   });
 
   if (!config.host || !config.user || !config.password || !config.database) {
@@ -64,7 +63,7 @@ async function initializeDatabase() {
       location TEXT,
       size TEXT,
       type TEXT,
-      \`condition\` TEXT,
+      container_condition TEXT,
       color TEXT,
       quantity INTEGER,
       price TEXT,
@@ -82,7 +81,7 @@ async function initializeDatabase() {
         location: 'Memphis, TN',
         size: "40'",
         type: 'HC Cargo Worthy',
-        condition: 'WWT',
+        container_condition: 'WWT',
         color: 'Beige',
         quantity: 12,
         price: '$2,450',
@@ -95,7 +94,7 @@ async function initializeDatabase() {
         location: 'Jonesboro, AR',
         size: "20'",
         type: 'Side Door',
-        condition: '1-Trip',
+        container_condition: '1-Trip',
         color: 'Gray',
         quantity: 6,
         price: '$3,100',
@@ -108,7 +107,7 @@ async function initializeDatabase() {
     for (const record of sampleRecords) {
       await runStatement(
         `INSERT INTO containers (
-          id, vendor, location, size, type, \`condition\`,
+          id, vendor, location, size, type, container_condition,
           color, quantity, price, delivery, date, notes
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
@@ -117,7 +116,7 @@ async function initializeDatabase() {
           record.location,
           record.size,
           record.type,
-          record.condition,
+          record.container_condition,
           record.color,
           record.quantity,
           record.price,
@@ -152,7 +151,7 @@ app.post('/api/containers', async (req, res) => {
     location,
     size,
     type,
-    condition,
+    container_condition,
     color,
     quantity,
     price,
@@ -166,7 +165,7 @@ app.post('/api/containers', async (req, res) => {
   try {
     await runStatement(
       `INSERT INTO containers (
-        id, vendor, location, size, type, \`condition\`,
+        id, vendor, location, size, type, container_condition,
         color, quantity, price, delivery, date, notes
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
@@ -175,7 +174,7 @@ app.post('/api/containers', async (req, res) => {
         location,
         size,
         type,
-        condition,
+        container_condition,
         color,
         Number(quantity),
         price,
@@ -191,7 +190,7 @@ app.post('/api/containers', async (req, res) => {
       location,
       size,
       type,
-      condition,
+      container_condition,
       color,
       quantity: Number(quantity),
       price,
@@ -211,7 +210,7 @@ app.put('/api/containers/:id', async (req, res) => {
     location,
     size,
     type,
-    condition,
+    container_condition,
     color,
     quantity,
     price,
@@ -227,7 +226,7 @@ app.put('/api/containers/:id', async (req, res) => {
         location = ?,
         size = ?,
         type = ?,
-        condition = ?,
+        container_condition = ?,
         color = ?,
         quantity = ?,
         price = ?,
@@ -240,7 +239,7 @@ app.put('/api/containers/:id', async (req, res) => {
         location,
         size,
         type,
-        condition,
+        container_condition,
         color,
         Number(quantity),
         price,
@@ -260,7 +259,7 @@ app.put('/api/containers/:id', async (req, res) => {
       location,
       size,
       type,
-      condition,
+      container_condition,
       color,
       quantity: Number(quantity),
       price,

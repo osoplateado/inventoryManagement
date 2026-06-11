@@ -27,7 +27,7 @@ function renderInventory(records) {
         <td>${record.location}</td>
         <td>${record.size}</td>
         <td>${record.type}</td>
-        <td>${record.condition}</td>
+        <td>${record.container_condition}</td>
         <td>${record.color}</td>
         <td>${record.quantity}</td>
         <td>${record.price}</td>
@@ -49,7 +49,7 @@ function getFormData() {
     location: formData.get('location').trim(),
     size: formData.get('size').trim(),
     type: formData.get('type').trim(),
-    condition: formData.get('condition').trim(),
+    container_condition: formData.get('container_condition').trim(),
     color: formData.get('color').trim(),
     quantity: Number(formData.get('quantity')),
     price: formData.get('price').trim(),
@@ -68,7 +68,7 @@ function openModal(mode, record = null) {
   recordForm.location.value = record?.location || '';
   recordForm.size.value = record?.size || '';
   recordForm.type.value = record?.type || '';
-  recordForm.condition.value = record?.condition || '';
+  recordForm.container_condition.value = record?.container_condition || '';
   recordForm.color.value = record?.color || '';
   recordForm.quantity.value = record?.quantity || 1;
   recordForm.price.value = record?.price || '';
@@ -93,7 +93,7 @@ function filterRecords(query) {
       record.location,
       record.size,
       record.type,
-      record.condition,
+      record.container_condition,
       record.color,
       record.delivery,
       record.notes,
