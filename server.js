@@ -64,7 +64,7 @@ async function initializeDatabase() {
       location TEXT,
       size TEXT,
       type TEXT,
-      condition TEXT,
+      \`condition\` TEXT,
       color TEXT,
       quantity INTEGER,
       price TEXT,
