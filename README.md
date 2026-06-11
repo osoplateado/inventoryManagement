@@ -27,9 +27,50 @@ A simple shipping container inventory dashboard backed by Node and SQLite.
 
 ## Notes
 
-- The SQLite database file is created automatically by `server.js`.
+- This app now uses MySQL only. SQLite is no longer supported.
 - Sample data is seeded on first run if the database is empty.
 - Start the backend before using the site in the browser.
+
+## Using a hosted MySQL database
+
+Import your SQL file into the GoDaddy MySQL database and set these environment variables on your deployment host:
+
+- `DB_HOST=<your-database-host>`
+- `DB_USER=<mysql-username>`
+- `DB_PASSWORD=<mysql-password>`
+- `DB_NAME=<database-name>`
+- `DB_PORT=3306` (optional)
+
+The app will connect to MySQL using these credentials.
+
+If you deploy to a service like Render, make sure the database host allows remote connections from the service, or host the app in the same environment as the database.
+
+## Importing your GoDaddy SQL dump
+
+1. Copy your SQL dump file into the project folder or note its local path.
+2. Set your MySQL credentials in environment variables:
+   - `DB_HOST`
+   - `DB_USER`
+   - `DB_PASSWORD`
+   - `DB_NAME`
+   - `DB_PORT=3306` (optional)
+3. Run:
+
+```bash
+npm run import-sql -- ./your-dump-file.sql
+```
+
+That script connects to your GoDaddy-hosted MySQL database and executes the dump statements.
+
+## Verify the imported schema
+
+After importing, verify the table and row count with a MySQL client, for example:
+
+```bash
+mysql -h "$DB_HOST" -u "$DB_USER" -p"$DB_PASSWORD" "$DB_NAME" -e "SHOW TABLES; SELECT COUNT(*) FROM containers;"
+```
+
+If `containers` appears and returns a count, your import succeeded.
 
 ## Deploying to Render
 

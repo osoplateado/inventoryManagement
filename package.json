@@ -4,10 +4,11 @@
   "description": "Shipping container inventory dashboard with a Node + SQLite backend",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "import-sql": "node import-sql.js"
   },
   "dependencies": {
     "express": "^4.18.2",
-    "sqlite3": "^5.1.6"
+    "mysql2": "^3.22.5"
   }
 }
