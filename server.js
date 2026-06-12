@@ -136,11 +136,9 @@ async function initializeDatabase() {
 }
 
 app.use(express.json());
-app.use(express.static(__dirname));
 
-app.get('/inventory', (req, res) => {
-  res.sendFile(path.join(__dirname, 'inventory.html'));
-});
+const staticPath = path.join(__dirname, 'dist');
+app.use(express.static(staticPath));
 
 app.get('/api/containers', async (req, res) => {
   try {
@@ -289,6 +287,10 @@ app.delete('/api/containers/:id', async (req, res) => {
   } catch (err) {
     handleDbError(res, err);
   }
+});
+
+app.get('*', (req, res) => {
+  res.sendFile(path.join(staticPath, 'index.html'));
 });
 
 const port = process.env.PORT || 3000;
