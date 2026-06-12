@@ -138,12 +138,8 @@ async function initializeDatabase() {
 
 app.use(express.json());
 
-const distPath = path.join(__dirname, 'dist');
-if (fs.existsSync(distPath)) {
-  app.use(express.static(distPath));
-} else {
-  app.use(express.static(__dirname));
-}
+const staticPath = path.join(__dirname, 'dist');
+app.use(express.static(staticPath));
 
 app.get('/api/containers', async (req, res) => {
   try {
@@ -295,10 +291,7 @@ app.delete('/api/containers/:id', async (req, res) => {
 });
 
 app.get('*', (req, res) => {
-  const htmlPath = fs.existsSync(distPath)
-    ? path.join(distPath, 'index.html')
-    : path.join(__dirname, 'index.html');
-  res.sendFile(htmlPath);
+  res.sendFile(path.join(staticPath, 'index.html'));
 });
 
 const port = process.env.PORT || 3000;

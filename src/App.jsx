@@ -23,9 +23,7 @@ function formatDate(value) {
 }
 
 function App() {
-  const [page, setPage] = useState(() => {
-    return window.location.pathname === '/inventory' ? 'inventory' : 'home';
-  });
+  const [page, setPage] = useState(() => (window.location.pathname === '/inventory' ? 'inventory' : 'home'));
   const [records, setRecords] = useState([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(false);
@@ -33,6 +31,17 @@ function App() {
   const [modalOpen, setModalOpen] = useState(false);
   const [formState, setFormState] = useState(initialFormState);
   const [editingId, setEditingId] = useState(null);
+  const [heroCursor, setHeroCursor] = useState({ x: 0, y: 0, active: false });
+
+  const heroStyles = {
+    '--mouse-x': `${heroCursor.x}px`,
+    '--mouse-y': `${heroCursor.y}px`,
+    '--mouse-active': heroCursor.active ? 1 : 0,
+  };
+
+  useEffect(() => {
+    document.title = page === 'inventory' ? 'Inventory Dashboard' : 'Developer Portfolio';
+  }, [page]);
 
   useEffect(() => {
     const handlePopState = () => {
@@ -85,6 +94,19 @@ function App() {
     } finally {
       setLoading(false);
     }
+  }
+
+  function handleHeroMove(event) {
+    const rect = event.currentTarget.getBoundingClientRect();
+    setHeroCursor({
+      x: event.clientX - rect.left,
+      y: event.clientY - rect.top,
+      active: true,
+    });
+  }
+
+  function handleHeroLeave() {
+    setHeroCursor((current) => ({ ...current, active: false }));
   }
 
   function navigateTo(path) {
@@ -167,63 +189,120 @@ function App() {
 
   return (
     <div>
-      <header className="site-header">
-        <div className="container">
-          <div>
-            <p className="eyebrow">Shipping Container Inventory</p>
-            <h1>Container Database Dashboard</h1>
-            <p>Manage and search shipping container records with a simple inventory display backed by a server API.</p>
-          </div>
-          <button type="button" className="button primary" onClick={() => navigateTo('/inventory')}>
-            View Inventory App
+      <header
+        className={`site-header ${page === 'home' ? 'hero' : ''}`}
+        style={page === 'home' ? heroStyles : undefined}
+        onMouseMove={page === 'home' ? handleHeroMove : undefined}
+        onMouseLeave={page === 'home' ? handleHeroLeave : undefined}
+      >
+        <div className="container nav-row">
+          <h1 className="brand">Tri State Containers</h1>
+          {page === 'home' ? (
+            <nav className="site-nav">
+              <a href="#about">About</a>
+              <a href="#projects">Projects</a>
+              <a href="#contact">Contact</a>
+            </nav>
+          ) : null}
+          <button type="button" className="button primary" onClick={() => navigateTo(page === 'inventory' ? '/' : '/inventory')}>
+            {page === 'inventory' ? 'Back to Portfolio' : 'View Inventory App'}
           </button>
         </div>
+
+        {page === 'home' && (
+          <div className="container hero-content">
+            <p className="eyebrow">Full Stack Web Developer</p>
+            <h2>Hi, I’m a developer building clean, practical web apps for small businesses.</h2>
+            <p className="hero-text">
+              I create modern user experiences with React and Node.js, and I ship tools that solve real operations
+              problems for inventory, logistics, and business workflows.
+            </p>
+            <div className="hero-actions">
+              <button type="button" className="button primary" onClick={() => navigateTo('/inventory')}>
+                Open Inventory Dashboard
+              </button>
+              <a className="button secondary" href="#contact">
+                Get in Touch
+              </a>
+            </div>
+          </div>
+        )}
       </header>
 
       <main className="container">
         {page === 'home' ? (
-          <section className="panel resume-panel">
-            <h2>About</h2>
-            <p>
-              Experienced full-stack developer with a focus on practical tools for small businesses. I build
-              efficient front-end experiences, REST APIs, and maintainable application logic.
-            </p>
-
-            <div className="resume-grid">
-              <div>
-                <h3>Skills</h3>
-                <ul>
-                  <li>JavaScript / React / Express</li>
-                  <li>HTML, CSS, Responsive Design</li>
-                  <li>REST APIs, PostgreSQL, Browser storage</li>
-                  <li>Git, debugging, maintainable code</li>
-                </ul>
+          <>
+            <section id="about" className="panel about-panel">
+              <div className="section-intro">
+                <p className="section-label">About</p>
+                <h2>Developer with an eye for efficient tooling.</h2>
               </div>
-
-              <div>
-                <h3>Experience</h3>
-                <p>
-                  Created an inventory management dashboard for container records, including search, add,
-                  edit, and server-backed persistence.
-                </p>
+              <p>
+                Fully committed to life-long learning and practical development. I build intuitive interfaces, scalable
+                APIs, and responsive applications that help teams manage inventory, projects, and business processes.
+              </p>
+              <div className="tech-grid">
+                {['React', 'Node.js', 'Express', 'PostgreSQL', 'JavaScript', 'HTML', 'CSS'].map((tech) => (
+                  <span key={tech} className="badge">
+                    {tech}
+                  </span>
+                ))}
               </div>
-            </div>
+            </section>
 
-            <h3>Projects</h3>
-            <ul>
-              <li>Container inventory application with edit/delete workflows.</li>
-              <li>React-based portfolio landing page with direct project navigation.</li>
-            </ul>
+            <section id="projects" className="panel projects-panel">
+              <div className="section-intro">
+                <p className="section-label">Projects</p>
+                <h2>Work I’ve shipped.</h2>
+              </div>
+              <div className="cards-grid">
+                <article className="card">
+                  <h3>Shipping Container Inventory</h3>
+                  <p>A full-stack dashboard for managing container inventory with search, add, edit, and delete workflows.</p>
+                  <div className="badge-row">
+                    <span className="badge small">React</span>
+                    <span className="badge small">Express</span>
+                    <span className="badge small">PostgreSQL</span>
+                  </div>
+                  <div className="project-links">
+                    <button className="button secondary small" type="button" onClick={() => navigateTo('/inventory')}>
+                      Visit
+                    </button>
+                  </div>
+                </article>
+                <article className="card">
+                  <h3>Modern Portfolio Website</h3>
+                  <p>A responsive portfolio homepage designed to showcase projects, skills, and contact details.</p>
+                  <div className="badge-row">
+                    <span className="badge small">React</span>
+                    <span className="badge small">Vite</span>
+                    <span className="badge small">CSS</span>
+                  </div>
+                  <div className="project-links">
+                    <a className="button secondary small" href="#contact">
+                      Learn More
+                    </a>
+                  </div>
+                </article>
+              </div>
+            </section>
 
-            <h3>Contact</h3>
-            <p>Email: <a href="mailto:you@example.com">you@example.com</a></p>
-
-            <div className="button-row">
-              <button type="button" className="button primary" onClick={() => navigateTo('/inventory')}>
-                View Inventory App
-              </button>
-            </div>
-          </section>
+            <section id="contact" className="panel contact-panel">
+              <div className="section-intro">
+                <p className="section-label">Contact</p>
+                <h2>Let’s build something together.</h2>
+              </div>
+              <p>
+                Have a question or want to work together? Reach out via email and I’ll get back to you as soon as possible.
+              </p>
+              <div className="contact-details">
+                <a href="mailto:you@example.com">you@example.com</a>
+                <a href="https://github.com/" target="_blank" rel="noreferrer">
+                  GitHub
+                </a>
+              </div>
+            </section>
+          </>
         ) : (
           <section className="panel search-panel">
             <div className="search-row">
@@ -289,18 +368,10 @@ function App() {
                           <td>{formatDate(record.date)}</td>
                           <td>{record.notes || ''}</td>
                           <td>
-                            <button
-                              type="button"
-                              className="button secondary small"
-                              onClick={() => openEditModal(record)}
-                            >
+                            <button type="button" className="button secondary small" onClick={() => openEditModal(record)}>
                               Edit
                             </button>
-                            <button
-                              type="button"
-                              className="button secondary small"
-                              onClick={() => deleteRecord(record.id)}
-                            >
+                            <button type="button" className="button secondary small" onClick={() => deleteRecord(record.id)}>
                               Delete
                             </button>
                           </td>
@@ -394,7 +465,7 @@ function App() {
 
       <footer className="site-footer">
         <div className="container">
-          <p>React inventory dashboard with server-backed persistence.</p>
+          <p>Portfolio and inventory dashboard with React, Node, and PostgreSQL.</p>
         </div>
       </footer>
     </div>
