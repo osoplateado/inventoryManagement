@@ -1,4 +1,5 @@
 const express = require('express');
+const fs = require('fs');
 const path = require('path');
 const { Pool } = require('pg');
 const { randomUUID } = require('crypto');
@@ -136,11 +137,13 @@ async function initializeDatabase() {
 }
 
 app.use(express.json());
-app.use(express.static(__dirname));
 
-app.get('/inventory', (req, res) => {
-  res.sendFile(path.join(__dirname, 'inventory.html'));
-});
+const distPath = path.join(__dirname, 'dist');
+if (fs.existsSync(distPath)) {
+  app.use(express.static(distPath));
+} else {
+  app.use(express.static(__dirname));
+}
 
 app.get('/api/containers', async (req, res) => {
   try {
@@ -289,6 +292,13 @@ app.delete('/api/containers/:id', async (req, res) => {
   } catch (err) {
     handleDbError(res, err);
   }
+});
+
+app.get('*', (req, res) => {
+  const htmlPath = fs.existsSync(distPath)
+    ? path.join(distPath, 'index.html')
+    : path.join(__dirname, 'index.html');
+  res.sendFile(htmlPath);
 });
 
 const port = process.env.PORT || 3000;

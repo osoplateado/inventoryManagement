@@ -15,21 +15,23 @@ A simple shipping container inventory dashboard backed by Node and PostgreSQL.
 
 1. Open a terminal in this folder.
 2. Run `npm install`.
-3. Run `npm start`.
-4. Open `http://localhost:3000` in your browser.
+3. Run `npm run build` to build the React app.
+4. Run `npm start`.
+5. Open `http://localhost:3000` in your browser.
 
 ## Features
 
-- Fetches inventory from a SQLite database via API
+- React frontend built with Vite
+- Fetches inventory from a PostgreSQL-backed API
 - Adds, edits, and deletes records with backend persistence
 - Searches inventory by vendor, location, size, type, condition, color, delivery, and notes
-- Serves the website and API from the same Node server
+- Serves the React app and API from the same Node server
 
 ## Notes
 
 - This app now uses PostgreSQL only.
 - Sample data is seeded on first run if the database is empty.
-- Start the backend before using the site in the browser.
+- Build the React frontend before starting the server in production.
 
 ## Using a hosted PostgreSQL database
 
