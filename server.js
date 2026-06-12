@@ -1,6 +1,6 @@
 const express = require('express');
 const path = require('path');
-const mysql = require('mysql2/promise');
+const { Pool } = require('pg');
 const { randomUUID } = require('crypto');
 
 const app = express();
@@ -12,53 +12,59 @@ function handleDbError(res, err) {
 }
 
 async function getRow(sql, params = []) {
-  const [rows] = await db.query(sql, params);
-  return rows[0];
+  const result = await db.query(sql, params);
+  return result.rows[0];
 }
 
 async function getRows(sql, params = []) {
-  const [rows] = await db.query(sql, params);
-  return rows;
+  const result = await db.query(sql, params);
+  return result.rows;
 }
 
 async function runStatement(sql, params = []) {
-  const [result] = await db.execute(sql, params);
+  const result = await db.query(sql, params);
   return result;
 }
 
-async function initializeMySQL() {
-  const config = {
-    host: process.env.DB_HOST,
-    user: process.env.DB_USER,
-    password: process.env.DB_PASSWORD,
-    database: process.env.DB_NAME,
-    port:  Number(process.env.DB_PORT || '3306'),
-    waitForConnections: true,
-    connectionLimit: 10,
-    queueLimit: 0,
-  };
+async function initializePostgres() {
+  const connectionString = process.env.DATABASE_URL;
+  const useSsl = process.env.DATABASE_SSL === 'true' || process.env.PGSSLMODE === 'require';
+  const ssl = useSsl ? { rejectUnauthorized: false } : undefined;
 
-  console.log('Starting MySQL connection with:', {
+  const config = connectionString
+    ? { connectionString, max: 10, ssl }
+    : {
+        host: process.env.DB_HOST,
+        user: process.env.DB_USER,
+        password: process.env.DB_PASSWORD,
+        database: process.env.DB_NAME,
+        port: Number(process.env.DB_PORT || '5432'),
+        max: 10,
+        ssl,
+      };
+
+  console.log('Starting PostgreSQL connection with:', connectionString ? { DATABASE_URL: 'set', DATABASE_SSL: process.env.DATABASE_SSL } : {
     DB_HOST: config.host,
     DB_USER: config.user,
     DB_NAME: config.database,
     DB_PORT: config.port,
+    DATABASE_SSL: process.env.DATABASE_SSL,
   });
 
-  if (!config.host || !config.user || !config.password || !config.database) {
-    console.error('MySQL configuration is incomplete. Set DB_HOST, DB_USER, DB_PASSWORD, and DB_NAME.');
+  if (!connectionString && (!config.host || !config.user || !config.password || !config.database)) {
+    console.error('PostgreSQL configuration is incomplete. Set DATABASE_URL or DB_HOST, DB_USER, DB_PASSWORD, and DB_NAME.');
     process.exit(1);
   }
 
-  return mysql.createPool(config);
+  return new Pool(config);
 }
 
 async function initializeDatabase() {
-  db = await initializeMySQL();
+  db = await initializePostgres();
 
   await runStatement(`
     CREATE TABLE IF NOT EXISTS containers (
-      id VARCHAR(36) PRIMARY KEY,
+      id UUID PRIMARY KEY,
       vendor TEXT,
       location TEXT,
       size TEXT,
@@ -74,7 +80,7 @@ async function initializeDatabase() {
   `);
 
   const row = await getRow('SELECT COUNT(*) AS count FROM containers');
-  if (!row || row.count === 0) {
+  if (!row || Number(row.count) === 0) {
     const sampleRecords = [
       {
         vendor: 'ABC Containers',
@@ -109,7 +115,7 @@ async function initializeDatabase() {
         `INSERT INTO containers (
           id, vendor, location, size, type, container_condition,
           color, quantity, price, delivery, date, notes
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
         [
           randomUUID(),
           record.vendor,
@@ -167,7 +173,7 @@ app.post('/api/containers', async (req, res) => {
       `INSERT INTO containers (
         id, vendor, location, size, type, container_condition,
         color, quantity, price, delivery, date, notes
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
       [
         id,
         vendor,
@@ -222,18 +228,18 @@ app.put('/api/containers/:id', async (req, res) => {
   try {
     const result = await runStatement(
       `UPDATE containers SET
-        vendor = ?,
-        location = ?,
-        size = ?,
-        type = ?,
-        container_condition = ?,
-        color = ?,
-        quantity = ?,
-        price = ?,
-        delivery = ?,
-        date = ?,
-        notes = ?
-      WHERE id = ?`,
+        vendor = $1,
+        location = $2,
+        size = $3,
+        type = $4,
+        container_condition = $5,
+        color = $6,
+        quantity = $7,
+        price = $8,
+        delivery = $9,
+        date = $10,
+        notes = $11
+      WHERE id = $12`,
       [
         vendor,
         location,
@@ -250,7 +256,7 @@ app.put('/api/containers/:id', async (req, res) => {
       ]
     );
 
-    const changed = result.affectedRows;
+    const changed = result.rowCount;
     if (changed === 0) return res.status(404).json({ error: 'Record not found' });
 
     res.json({
@@ -276,8 +282,8 @@ app.delete('/api/containers/:id', async (req, res) => {
   const { id } = req.params;
 
   try {
-    const result = await runStatement('DELETE FROM containers WHERE id = ?', [id]);
-    const deleted = result.affectedRows;
+    const result = await runStatement('DELETE FROM containers WHERE id = $1', [id]);
+    const deleted = result.rowCount;
     if (deleted === 0) return res.status(404).json({ error: 'Record not found' });
     res.status(204).end();
   } catch (err) {
@@ -291,7 +297,7 @@ initializeDatabase()
   .then(() => {
     app.listen(port, () => {
       console.log(`Server listening on http://localhost:${port}`);
-      console.log('Using MySQL database');
+      console.log('Using PostgreSQL database');
     });
   })
   .catch((err) => {

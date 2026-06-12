@@ -1,15 +1,15 @@
 # Shipping Container Inventory Website
 
-A simple shipping container inventory dashboard backed by Node and SQLite.
+A simple shipping container inventory dashboard backed by Node and PostgreSQL.
 
 ## Files
 
 - `index.html` — main dashboard and modal form
 - `styles.css` — page layout and styling
 - `script.js` — frontend logic with API calls
-- `server.js` — Node Express server and SQLite integration
+- `server.js` — Node Express server and PostgreSQL integration
 - `package.json` — dependencies and start script
-- `.gitignore` — ignores `node_modules` and database file
+- `.gitignore` — ignores `node_modules`
 
 ## How to run
 
@@ -27,47 +27,51 @@ A simple shipping container inventory dashboard backed by Node and SQLite.
 
 ## Notes
 
-- This app now uses MySQL only. SQLite is no longer supported.
+- This app now uses PostgreSQL only.
 - Sample data is seeded on first run if the database is empty.
 - Start the backend before using the site in the browser.
 
-## Using a hosted MySQL database
+## Using a hosted PostgreSQL database
 
-Import your SQL file into the GoDaddy MySQL database and set these environment variables on your deployment host:
+You can connect with a full connection string using `DATABASE_URL`, or by setting individual credentials:
 
-- `DB_HOST=<your-database-host>`
-- `DB_USER=<mysql-username>`
-- `DB_PASSWORD=<mysql-password>`
-- `DB_NAME=<database-name>`
-- `DB_PORT=3306` (optional)
+- `DATABASE_URL=postgres://user:password@host:5432/dbname`
+- OR set:
+  - `DB_HOST=<your-database-host>`
+  - `DB_USER=<postgres-username>`
+  - `DB_PASSWORD=<postgres-password>`
+  - `DB_NAME=<database-name>`
+  - `DB_PORT=5432` (optional)
 
-The app will connect to MySQL using these credentials.
+If `DATABASE_URL` is present, it will be used first.
+
+If your Postgres provider requires SSL/TLS, either add `?sslmode=require` to `DATABASE_URL` or set `DATABASE_SSL=true`.
 
 If you deploy to a service like Render, make sure the database host allows remote connections from the service, or host the app in the same environment as the database.
 
-## Importing your GoDaddy SQL dump
+## Importing your SQL dump
 
 1. Copy your SQL dump file into the project folder or note its local path.
-2. Set your MySQL credentials in environment variables:
+2. Set your PostgreSQL credentials in environment variables:
    - `DB_HOST`
    - `DB_USER`
    - `DB_PASSWORD`
    - `DB_NAME`
-   - `DB_PORT=3306` (optional)
+   - `DB_PORT=5432` (optional)
 3. Run:
 
 ```bash
 npm run import-sql -- ./your-dump-file.sql
 ```
 
-That script connects to your GoDaddy-hosted MySQL database and executes the dump statements.
+That script connects to your PostgreSQL database and executes the dump statements.
 
 ## Verify the imported schema
 
-After importing, verify the table and row count with a MySQL client, for example:
+After importing, verify the table and row count with a PostgreSQL client, for example:
 
 ```bash
-mysql -h "$DB_HOST" -u "$DB_USER" -p"$DB_PASSWORD" "$DB_NAME" -e "SHOW TABLES; SELECT COUNT(*) FROM containers;"
+psql "postgresql://$DB_USER:$DB_PASSWORD@$DB_HOST:$DB_PORT/$DB_NAME" -c "\dt; SELECT COUNT(*) FROM containers;"
 ```
 
 If `containers` appears and returns a count, your import succeeded.
