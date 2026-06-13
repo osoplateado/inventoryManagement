@@ -86,6 +86,4 @@ If `containers` appears and returns a count, your import succeeded.
    - Build command: `npm install`
    - Start command: `npm start`
 4. Attach a persistent disk to the service if you want the database to survive redeploys.
-   - Set `DB_PATH=/disk/inventory.db` in Render environment variables.
-5. If you already have a local `inventory.db`, include it in the repo for the initial deploy or copy it into the mounted disk inside the service.
-6. Open the Render URL, and the app will read/write the SQLite file from the selected path.
+5. Open the Render URL, and the app will connect to PostgreSQL using the configured database settings.
