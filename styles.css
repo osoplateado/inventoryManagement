@@ -398,6 +398,151 @@ textarea {
   overflow-x: auto;
 }
 
+/* Inventory AI chat styles */
+.ai-panel {
+  margin-top: 1.5rem;
+}
+
+.ai-panel h3 {
+  margin: 0 0 1rem;
+  font-size: 1.15rem;
+  color: #ffffff;
+}
+
+.ai-chat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.ai-chat .messages {
+  max-height: 320px;
+  overflow: auto;
+  padding: 0.75rem;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(148, 163, 184, 0.06);
+  border-radius: 0.75rem;
+}
+
+.message {
+  margin-bottom: 0.5rem;
+  padding: 0.6rem 0.75rem;
+  border-radius: 0.6rem;
+}
+
+.message.user {
+  background: rgba(124, 58, 237, 0.12);
+  color: #f8fafc;
+  align-self: flex-end;
+}
+
+.message.assistant {
+  background: rgba(255, 255, 255, 0.03);
+  color: #e2e8f0;
+  align-self: flex-start;
+}
+
+.message .message-text {
+  white-space: pre-wrap;
+}
+
+.ai-results {
+  margin-top: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.ai-row {
+  background: rgba(255, 255, 255, 0.02);
+  padding: 0.55rem 0.75rem;
+  border-radius: 0.5rem;
+  font-size: 0.95rem;
+  color: #dbeafe;
+}
+
+.ai-form {
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+  margin-top: 0.5rem;
+}
+
+.ai-form input {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 999px;
+  padding: 0.8rem 1rem;
+  background: rgba(15, 23, 42, 0.9);
+  color: #e2e8f0;
+}
+
+.ai-form input::placeholder {
+  color: rgba(226, 232, 240, 0.5);
+}
+
+.ai-form button {
+  padding: 0.75rem 1rem;
+  border-radius: 999px;
+}
+
+@media (max-width: 640px) {
+  .ai-chat .messages {
+    max-height: 220px;
+  }
+}
+
+/* Animations */
+@keyframes slideFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.message {
+  animation: slideFadeIn 220ms cubic-bezier(.2,.9,.2,1) both;
+}
+
+/* Typing indicator dots */
+.typing .dots {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.typing .dots span {
+  width: 8px;
+  height: 8px;
+  background: rgba(226, 232, 240, 0.9);
+  border-radius: 50%;
+  opacity: 0.35;
+  transform: translateY(0);
+  animation: typingBounce 1s infinite ease-in-out;
+}
+
+.typing .dots span:nth-child(1) {
+  animation-delay: 0s;
+}
+.typing .dots span:nth-child(2) {
+  animation-delay: 0.12s;
+}
+.typing .dots span:nth-child(3) {
+  animation-delay: 0.24s;
+}
+
+@keyframes typingBounce {
+  0% { opacity: 0.35; transform: translateY(0); }
+  50% { opacity: 1; transform: translateY(-6px); }
+  100% { opacity: 0.35; transform: translateY(0); }
+}
+
+
 .inventory-table {
   width: 100%;
   min-width: 1100px;

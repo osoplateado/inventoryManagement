@@ -9,9 +9,10 @@ function Header({ page, heroStyles, onHeroMove, onHeroLeave, navigateTo }) {
       onMouseLeave={page === 'home' ? onHeroLeave : undefined}
     >
       <div className="nav-row">
-        <h1 className="brand">Robert Graman</h1>
+        
         {page === 'home' ? (
           <>
+          <h1 className="brand">Robert Graman</h1>
             <nav className="site-nav">
               <a href="#about">About Me</a>
               <a href="#projects">Projects</a>
@@ -52,6 +53,10 @@ function Header({ page, heroStyles, onHeroMove, onHeroLeave, navigateTo }) {
             </div>
           </>
         ) : null}
+
+        {page === 'inventory' && (
+        <h1 className="brand">Tri State Containers Inventory Dashboard</h1>
+      )}
       </div>
 
       {page === 'home' && (
@@ -63,13 +68,11 @@ function Header({ page, heroStyles, onHeroMove, onHeroLeave, navigateTo }) {
             problems for inventory, logistics, and business workflows.
           </p>
           <div className="hero-actions">
-            <button type="button" className="button primary" onClick={() => navigateTo('/inventory')}>
-              Open Inventory Dashboard
-            </button>
+            
           </div>
         </div>
       )}
-    </header>
+          </header>
   );
 }
 

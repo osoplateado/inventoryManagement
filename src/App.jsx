@@ -4,6 +4,7 @@ import Footer from './components/Footer';
 import Header from './components/Header';
 import HomePage from './components/HomePage';
 import InventoryDashboard from './components/InventoryDashboard';
+import InventoryWelcome from './components/InventoryWelcome';
 import RecordModal from './components/RecordModal';
 
 const initialFormState = {
@@ -31,7 +32,7 @@ function formatDate(value) {
 function App() {
   const location = useLocation();
   const navigate = useNavigate();
-  const page = location.pathname === '/inventory' ? 'inventory' : 'home';
+  const page = location.pathname.startsWith('/inventory') ? 'inventory' : 'home';
   const [records, setRecords] = useState([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(false);
@@ -192,8 +193,9 @@ function App() {
       <main className="container">
         <Routes>
           <Route path="/" element={<HomePage navigateTo={navigateTo} />} />
+          <Route path="/inventory" element={<InventoryWelcome navigateTo={navigateTo} />} />
           <Route
-            path="/inventory"
+            path="/inventory/list"
             element={
               <InventoryDashboard
                 search={search}

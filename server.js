@@ -137,6 +137,10 @@ async function initializeDatabase() {
 }
 
 app.use(express.json());
+// Parse URL-encoded bodies (for form POSTs from some email providers)
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+// Parse raw/text bodies (catch raw MIME or text payloads)
+app.use(express.text({ type: ['text/*', 'message/rfc822', 'application/octet-stream'], limit: '20mb' }));
 
 const staticPath = path.join(__dirname, 'dist');
 app.use(express.static(staticPath));
@@ -290,8 +294,75 @@ app.delete('/api/containers/:id', async (req, res) => {
   }
 });
 
+// Simple AI query endpoint: performs a keyword search across container fields
+app.post('/api/ai/query', async (req, res) => {
+  try {
+    const { query } = req.body;
+    if (!query || typeof query !== 'string') return res.status(400).json({ error: 'Query text required' });
+
+    const q = `%${query}%`;
+    const rows = await getRows(
+      `SELECT * FROM containers WHERE
+        vendor ILIKE $1 OR
+        location ILIKE $1 OR
+        size ILIKE $1 OR
+        type ILIKE $1 OR
+        container_condition ILIKE $1 OR
+        color ILIKE $1 OR
+        delivery ILIKE $1 OR
+        notes ILIKE $1
+      ORDER BY date DESC LIMIT 50`,
+      [q]
+    );
+
+    res.json({ results: rows });
+  } catch (err) {
+    handleDbError(res, err);
+  }
+});
+
 app.get('*', (req, res) => {
   res.sendFile(path.join(staticPath, 'index.html'));
+});
+
+// Inbound email webhook for inventory@robertgraman.com
+app.post('/email/inbound', async (req, res) => {
+  try {
+    // Ensure emails directory exists
+    const emailsDir = path.join(__dirname, 'emails');
+    fs.mkdirSync(emailsDir, { recursive: true });
+
+    // Collect useful pieces from common providers
+    const headers = req.headers || {};
+    const body = req.body;
+
+    const to = headers.to || (body && body.to) || headers['recipient'] || 'unknown';
+    const from = headers.from || (body && body.from) || headers['sender'] || 'unknown';
+    const subject = headers.subject || (body && body.subject) || 'No subject';
+
+    // Prepare a log object
+    const emailRecord = {
+      receivedAt: new Date().toISOString(),
+      to,
+      from,
+      subject,
+      headers,
+      body,
+    };
+
+    // Log to console (prints contents)
+    console.log('Inbound email received:', emailRecord);
+
+    // Save to file for persistence
+    const name = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.json`;
+    const filePath = path.join(emailsDir, name);
+    fs.writeFileSync(filePath, JSON.stringify(emailRecord, null, 2), 'utf8');
+
+    res.status(200).json({ ok: true, saved: filePath });
+  } catch (err) {
+    console.error('Failed to handle inbound email:', err);
+    res.status(500).json({ error: 'failed to process email' });
+  }
 });
 
 const port = process.env.PORT || 3000;
