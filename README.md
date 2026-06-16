@@ -51,6 +51,44 @@ If your Postgres provider requires SSL/TLS, either add `?sslmode=require` to `DA
 
 If you deploy to a service like Render, make sure the database host allows remote connections from the service, or host the app in the same environment as the database.
 
+## Inbound email summaries
+
+This app can receive email payloads on `/email/inbound`, summarize them with OpenAI, and store them in `email_summaries`.
+
+Required environment variables:
+
+- `OPENAI_API_KEY` — your OpenAI API key
+- `OPENAI_MODEL` — optional, defaults to `gpt-3.5-turbo`
+
+The webhook saves incoming email metadata and text, then creates a summary and inserts a record into PostgreSQL.
+
+Example local test with ngrok:
+
+```bash
+npm start
+ngrok http 3000
+```
+
+Then set your email automation POST URI to:
+
+```text
+https://<your-ngrok-id>.ngrok.io/email/inbound
+```
+
+Test the webhook with curl:
+
+```bash
+curl -X POST 'https://<your-ngrok-id>.ngrok.io/email/inbound' \
+  -H 'Content-Type: application/json' \
+  -d '{"to":"inventory@robertgraman.com","from":"sender@example.com","subject":"Test","text":"Hello inventory"}'
+```
+
+Retrieve summaries from the backend:
+
+```bash
+curl http://localhost:3000/api/email-summaries
+```
+
 ## Importing your SQL dump
 
 1. Copy your SQL dump file into the project folder or note its local path.

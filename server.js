@@ -3,9 +3,11 @@ const fs = require('fs');
 const path = require('path');
 const { Pool } = require('pg');
 const { randomUUID } = require('crypto');
+const { OpenAI } = require('openai');
 
 const app = express();
 let db;
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 function handleDbError(res, err) {
   console.error(err);
@@ -25,6 +27,84 @@ async function getRows(sql, params = []) {
 async function runStatement(sql, params = []) {
   const result = await db.query(sql, params);
   return result;
+}
+
+function getEmailText(body) {
+  if (!body) return '';
+  if (typeof body === 'string') return body;
+  if (typeof body === 'object') {
+    return body.text || body.body || body.html || JSON.stringify(body);
+  }
+  return String(body);
+}
+
+// Simple CSV parser that respects quoted fields
+function parseCsv(text) {
+  const rows = [];
+  let cur = '';
+  let row = [];
+  let inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (ch === '"') {
+      // lookahead for escaped quote
+      if (inQuotes && text[i + 1] === '"') {
+        cur += '"';
+        i++; // skip escaped quote
+      } else {
+        inQuotes = !inQuotes;
+      }
+      continue;
+    }
+    if (ch === ',' && !inQuotes) {
+      row.push(cur);
+      cur = '';
+      continue;
+    }
+    if (ch === '\n' ) {
+      // handle CRLF
+      row.push(cur);
+      rows.push(row);
+      row = [];
+      cur = '';
+      continue;
+    }
+    cur += ch;
+  }
+  // push last token
+  if (cur !== '' || row.length > 0) {
+    row.push(cur);
+    rows.push(row);
+  }
+  return rows;
+}
+
+function cleanThousandSeparatorsInDollarAmounts(text) {
+  // Replace occurrences like $1,800 or $12,345.67 -> $1800 and $12345.67
+  return text.replace(/\$(\d{1,3}(?:,\d{3})+(?:\.\d+)?)/g, (_m, g1) => '$' + g1.replace(/,/g, ''));
+}
+
+
+async function summarizeEmail({ to, from, subject, text }) {
+  if (!process.env.OPENAI_API_KEY) {
+    console.warn('OPENAI_API_KEY is not set. Skipping AI summary.');
+    return 'OpenAI API key not configured. Summary unavailable.';
+  }
+
+  const prompt = `Email received by inventory@robertgraman.com from ${from} with subject \"${subject}\" and body \n${text}`;
+
+  const response = await openai.chat.completions.create({
+    model: process.env.OPENAI_MODEL || 'gpt-3.5-turbo',
+    messages: [
+      { role: 'system', content: 'You are an assistant that summarizes inbound email messages for a shipping container inventory manager. Create a concise summary of the email, including the sender, location, size, type, container condition, color, quantity, price, and any other details.' },
+      { role: 'user', content: prompt },
+    ],
+    temperature: 0.2,
+    max_tokens: 250,
+  });
+
+  console.log('OpenAI response:', response?.choices?.[0]?.message?.content?.trim() || 'No summary generated.');
+  return response?.choices?.[0]?.message?.content?.trim() || 'No summary generated.';
 }
 
 async function initializePostgres() {
@@ -77,6 +157,19 @@ async function initializeDatabase() {
       delivery TEXT,
       date TEXT,
       notes TEXT
+    )
+  `);
+
+  await runStatement(`
+    CREATE TABLE IF NOT EXISTS email_summaries (
+      id UUID PRIMARY KEY,
+      email_to TEXT,
+      email_from TEXT,
+      subject TEXT,
+      body TEXT,
+      summary TEXT,
+      received_at TIMESTAMPTZ,
+      metadata JSONB
     )
   `);
 
@@ -136,11 +229,29 @@ async function initializeDatabase() {
   }
 }
 
-app.use(express.json());
+// Capture raw body for fallback and debugging
+app.use(express.json({
+  verify: (req, _res, buf) => {
+    try { req.rawBody = buf.toString(); } catch (e) { req.rawBody = undefined; }
+  },
+  limit: '20mb',
+}));
 // Parse URL-encoded bodies (for form POSTs from some email providers)
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-// Parse raw/text bodies (catch raw MIME or text payloads)
-app.use(express.text({ type: ['text/*', 'message/rfc822', 'application/octet-stream'], limit: '20mb' }));
+// Parse raw/text bodies (catch raw MIME or text payloads, including CSV)
+app.use(express.text({ type: ['text/*', 'message/rfc822', 'application/octet-stream', 'text/csv'], limit: '20mb' }));
+
+// If JSON parsing fails (e.g., client sent CSV with wrong Content-Type),
+// fall back to the captured raw body instead of crashing the request.
+app.use((err, req, res, next) => {
+  if (err && (err instanceof SyntaxError || err.type === 'entity.parse.failed')) {
+    console.warn('Body parse failed, falling back to raw body.');
+    // provide the raw text as req.body so downstream handlers can use it
+    req.body = req.rawBody || '';
+    return next();
+  }
+  return next(err);
+});
 
 const staticPath = path.join(__dirname, 'dist');
 app.use(express.static(staticPath));
@@ -321,6 +432,15 @@ app.post('/api/ai/query', async (req, res) => {
   }
 });
 
+app.get('/api/email-summaries', async (req, res) => {
+  try {
+    const rows = await getRows('SELECT * FROM email_summaries ORDER BY received_at DESC');
+    res.json({ results: rows });
+  } catch (err) {
+    handleDbError(res, err);
+  }
+});
+
 app.get('*', (req, res) => {
   res.sendFile(path.join(staticPath, 'index.html'));
 });
@@ -333,37 +453,112 @@ app.post('/email/inbound', async (req, res) => {
     fs.mkdirSync(emailsDir, { recursive: true });
 
     // Collect useful pieces from common providers
-    const headers = req.headers || {};
-    const body = req.body;
+    const responseBody = req.body;
+    commitCSV(responseBody);
+    // console.log('Received raw email content:', req);
+    console.log('Received parsed email:', responseBody);
+    
+    const receivedAt = new Date();
 
-    const to = headers.to || (body && body.to) || headers['recipient'] || 'unknown';
-    const from = headers.from || (body && body.from) || headers['sender'] || 'unknown';
-    const subject = headers.subject || (body && body.subject) || 'No subject';
-
-    // Prepare a log object
-    const emailRecord = {
-      receivedAt: new Date().toISOString(),
-      to,
-      from,
-      subject,
-      headers,
-      body,
-    };
-
-    // Log to console (prints contents)
-    console.log('Inbound email received:', emailRecord);
-
-    // Save to file for persistence
-    const name = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.json`;
-    const filePath = path.join(emailsDir, name);
-    fs.writeFileSync(filePath, JSON.stringify(emailRecord, null, 2), 'utf8');
-
-    res.status(200).json({ ok: true, saved: filePath });
+    res.status(200).json({ ok: true});
   } catch (err) {
     console.error('Failed to handle inbound email:', err);
     res.status(500).json({ error: 'failed to process email' });
   }
 });
+
+async function commitCSV(csvText) {
+  
+    const raw = csvText;
+    if (!raw || raw.trim().length === 0) return res.status(400).json({ error: 'Empty body' });
+
+    // Clean common thousand separators in dollar amounts so CSV columns align
+    const cleaned = cleanThousandSeparatorsInDollarAmounts(raw);
+
+    const rows = parseCsv(cleaned);
+    console.log('Parsed CSV rows:', rows);
+    if (!rows || rows.length < 2) return ;
+
+    const header = rows[0].map(h => (h || '').toString().trim());
+
+    // Map CSV columns to containers table columns
+    const mapping = {
+      'Vendor': 'vendor',
+      'Location': 'location',
+      'Size': 'size',
+      'Type': 'type',
+      'Condition': 'container_condition',
+      'Color': 'color',
+      'Quantity': 'quantity',
+      'Price': 'price',
+      'Other Details': 'notes',
+    };
+
+    const mappedHeaders = header.map(h => mapping[h] || null);
+
+    const inserted = [];
+    for (let r = 1; r < rows.length; r++) {
+      const cols = rows[r];
+      if (cols.length === 1 && cols[0].trim() === '') continue; // skip empty
+
+      const record = {
+        vendor: null,
+        location: null,
+        size: null,
+        type: null,
+        container_condition: null,
+        color: null,
+        quantity: null,
+        price: null,
+        delivery: null,
+        date: null,
+        notes: null,
+      };
+
+      for (let i = 0; i < mappedHeaders.length; i++) {
+        const key = mappedHeaders[i];
+        if (!key) continue;
+        let val = (cols[i] || '').toString().trim();
+        // remove surrounding quotes
+        if (val.startsWith('"') && val.endsWith('"')) val = val.slice(1, -1);
+        if (key === 'quantity') {
+          const n = parseInt(val.replace(/[^0-9\-]/g, ''), 10);
+          record.quantity = Number.isNaN(n) ? null : n;
+        } else if (key === 'price') {
+          // normalize price like $1800
+          record.price = val.replace(/\s+/g, '');
+        } else {
+          record[key] = val;
+        }
+      }
+
+      // Skip rows without vendor or location
+      if (!record.vendor || !record.location) continue;
+
+      // Insert into DB
+      await runStatement(
+        `INSERT INTO containers (
+          id, vendor, location, size, type, container_condition,
+          color, quantity, price, delivery, date, notes
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+        [
+          randomUUID(),
+          record.vendor,
+          record.location,
+          record.size,
+          record.type,
+          record.container_condition,
+          record.color,
+          record.quantity === null ? 0 : record.quantity,
+          record.price,
+          record.delivery || '',
+          record.date || '',
+          record.notes || '',
+        ]
+      );
+      inserted.push(record);
+    }
+}
 
 const port = process.env.PORT || 3000;
 
