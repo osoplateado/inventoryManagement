@@ -370,7 +370,7 @@ app.post('/api/ai/query', async (req, res) => {
     }));
 
     const response = await openai.chat.completions.create({
-      model: process.env.OPENAI_MODEL || 'gpt-4o',
+      model: process.env.OPENAI_MODEL || 'o1-mini',
       messages: [
         { role: 'system', content: systemPrompt },
         ...priorMessages,

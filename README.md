@@ -129,6 +129,6 @@ If `containers` appears and returns a count, your import succeeded.
 
 TODO:
 - make staging table to insert before going to real table
-- if we get an email from a certain company, remove all entries from the database from teh certain company
+- make AI model loaded through ENV VAR
 
 curl -X POST "http://localhost:3000/email/inbound" --data-binary @test.csv -H "Content-Type: text/csv"
