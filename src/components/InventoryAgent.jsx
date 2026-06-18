@@ -15,25 +15,21 @@ function InventoryAgent() {
   async function sendQuery(text) {
     if (!text) return;
     const userMsg = { role: 'user', text };
-    setMessages((m) => [...m, userMsg]);
+    const updatedMessages = [...messages, userMsg];
+    setMessages(updatedMessages);
     setLoading(true);
 
     try {
       const resp = await fetch('/api/ai/query', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: text }),
+        body: JSON.stringify({ query: text, history: messages }),
       });
       const data = await resp.json();
-
-      const aiText = data.results && data.results.length
-        ? `Found ${data.results.length} matching records.`
-        : 'No matching records found.';
-
-      const assistantMsg = { role: 'assistant', text: aiText, results: data.results || [] };
-      setMessages((m) => [...m, assistantMsg]);
+      const aiText = data.answer || data.error || 'No response received.';
+      setMessages((m) => [...m, { role: 'assistant', text: aiText }]);
     } catch (err) {
-      setMessages((m) => [...m, { role: 'assistant', text: 'Error querying the database.' }]);
+      setMessages((m) => [...m, { role: 'assistant', text: 'Error reaching the AI.' }]);
     } finally {
       setLoading(false);
     }
@@ -56,15 +52,6 @@ function InventoryAgent() {
           {messages.map((m, i) => (
             <div key={i} className={`message ${m.role}`}>
               <div className="message-text">{m.text}</div>
-              {m.results && m.results.length > 0 && (
-                <div className="ai-results">
-                  {m.results.slice(0, 10).map((r) => (
-                    <div key={r.id} className="ai-row">
-                      <strong>{r.vendor}</strong> — {r.location} — {r.size} — Qty: {r.quantity}
-                    </div>
-                  ))}
-                </div>
-              )}
             </div>
           ))}
           {loading && (

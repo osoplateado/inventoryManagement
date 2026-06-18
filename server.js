@@ -346,30 +346,44 @@ app.delete('/api/containers/:id', async (req, res) => {
   }
 });
 
-// Simple AI query endpoint: performs a keyword search across container fields
 app.post('/api/ai/query', async (req, res) => {
   try {
-    const { query } = req.body;
+    const { query, history } = req.body;
     if (!query || typeof query !== 'string') return res.status(400).json({ error: 'Query text required' });
 
-    const q = `%${query}%`;
-    const rows = await getRows(
-      `SELECT * FROM containers WHERE
-        vendor ILIKE $1 OR
-        location ILIKE $1 OR
-        size ILIKE $1 OR
-        type ILIKE $1 OR
-        container_condition ILIKE $1 OR
-        color ILIKE $1 OR
-        delivery ILIKE $1 OR
-        notes ILIKE $1
-      ORDER BY date DESC LIMIT 50`,
-      [q]
-    );
+    if (!process.env.OPENAI_API_KEY) {
+      return res.status(503).json({ error: 'OpenAI API key not configured.' });
+    }
 
-    res.json({ results: rows });
+    const rows = await getRows('SELECT * FROM containers ORDER BY vendor ASC');
+    const inventoryText = rows.length
+      ? rows.map(r =>
+          `Vendor: ${r.vendor}, Location: ${r.location}, Size: ${r.size}ft, Type: ${r.type}, Condition: ${r.container_condition}, Color: ${r.color}, Qty: ${r.quantity}, Price: ${r.price}, Delivery: ${r.delivery || ''}${r.notes ? ', Notes: ' + r.notes : ''}${r.sender ? ', Sender: ' + r.sender : ''}`
+        ).join('\n')
+      : 'No containers in inventory.';
+
+    const systemPrompt = `You are an inventory assistant for a shipping container company. Answer questions based only on the inventory data provided. Be concise and helpful. when counting containers, make sure to add up using the Qty column\n\nCurrent inventory:\n${inventoryText}`;
+
+    const priorMessages = (history || []).map(m => ({
+      role: m.role === 'user' ? 'user' : 'assistant',
+      content: m.text,
+    }));
+
+    const response = await openai.chat.completions.create({
+      model: process.env.OPENAI_MODEL || 'gpt-4o',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        ...priorMessages,
+        { role: 'user', content: query },
+      ],
+      temperature: 0.2,
+      max_tokens: 500,
+    });
+
+    res.json({ answer: response.choices[0].message.content.trim() });
   } catch (err) {
-    handleDbError(res, err);
+    console.error('AI query error:', err);
+    res.status(500).json({ error: err.message || 'AI query failed.' });
   }
 });
 
