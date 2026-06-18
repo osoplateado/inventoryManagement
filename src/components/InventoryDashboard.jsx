@@ -1,4 +1,4 @@
-import React from 'react';
+import { useNavigate } from 'react-router-dom';
 
 function InventoryDashboard({
   search,
@@ -11,8 +11,18 @@ function InventoryDashboard({
   deleteRecord,
   formatDate,
 }) {
+  const navigate = useNavigate();
+
   return (
     <section className="panel search-panel">
+      <div className="dashboard-header">
+        <button type="button" className="button secondary" onClick={() => navigate('/inventory')}>
+          ← Back
+        </button>
+        <button type="button" className="button primary" onClick={openAddModal}>
+          Add Container
+        </button>
+      </div>
       <div className="search-row">
         <input
           type="search"
@@ -25,13 +35,7 @@ function InventoryDashboard({
         </button>
       </div>
 
-      <div className="button-row" style={{ marginTop: '1rem' }}>
-        <button type="button" className="button primary" onClick={openAddModal}>
-          Add Container
-        </button>
-      </div>
-
-      <div className="table-wrapper" style={{ marginTop: '1.5rem' }}>
+      <div className="table-wrapper">
         {loading ? (
           <p>Loading inventory...</p>
         ) : error ? (

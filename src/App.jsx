@@ -192,7 +192,7 @@ function App() {
     <div>
       <Header page={page} heroStyles={heroStyles} onHeroMove={handleHeroMove} onHeroLeave={handleHeroLeave} navigateTo={navigateTo} />
 
-      <main className="container">
+      <main className={`container${location.pathname === '/inventory/list' ? ' full-width' : ''}`}>
         <Routes>
           <Route path="/" element={<HomePage navigateTo={navigateTo} />} />
           <Route path="/inventory" element={<InventoryWelcome navigateTo={navigateTo} />} />

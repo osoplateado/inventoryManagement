@@ -161,63 +161,6 @@ async function initializeDatabase() {
     )
   `);
 
-  const row = await getRow('SELECT COUNT(*) AS count FROM containers');
-  if (!row || Number(row.count) === 0) {
-    const sampleRecords = [
-      {
-        vendor: 'ABC Containers',
-        location: 'Memphis, TN',
-        size: "40'",
-        type: 'HC Cargo Worthy',
-        container_condition: 'WWT',
-        color: 'Beige',
-        quantity: 12,
-        price: '$2,450',
-        delivery: 'FOB',
-        date: '2026-06-07',
-        notes: 'Limited availability',
-        sender: 'test@email.com',
-      },
-      {
-        vendor: 'Delta Container Co.',
-        location: 'Jonesboro, AR',
-        size: "20'",
-        type: 'Side Door',
-        container_condition: '1-Trip',
-        color: 'Gray',
-        quantity: 6,
-        price: '$3,100',
-        delivery: 'Delivered',
-        date: '2026-06-08',
-        notes: 'Ready to ship',
-        sender: 'test@email.com',
-      },
-    ];
-
-    for (const record of sampleRecords) {
-      await runStatement(
-        `INSERT INTO containers (
-          id, vendor, location, size, type, container_condition,
-          color, quantity, price, delivery, date, notes, sender
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
-        [
-          randomUUID(),
-          record.vendor,
-          record.location,
-          record.size,
-          record.type,
-          record.container_condition,
-          record.color,
-          record.quantity,
-          record.price,
-          record.delivery,
-          record.date,
-          record.notes,
-          record.sender ,
-        ]
-      );
-    }
-  }
 }
 
 // Capture raw body for fallback and debugging
@@ -489,9 +432,21 @@ async function commitCSV(csvText) {
       'Price': 'price',
       'Other Details': 'notes',
       'Email Sender': 'sender',
+      'date': 'date',
     };
 
     const mappedHeaders = header.map(h => mapping[h] || null);
+
+    // Determine sender from the first data row and delete their existing entries
+    const senderColIndex = mappedHeaders.indexOf('sender');
+    if (senderColIndex !== -1) {
+      const firstDataRow = rows[1];
+      const sender = (firstDataRow?.[senderColIndex] || '').toString().trim().replace(/^"|"$/g, '');
+      if (sender) {
+        const deleted = await runStatement('DELETE FROM containers WHERE sender = $1', [sender]);
+        console.log(`Deleted ${deleted.rowCount} existing rows for sender: ${sender}`);
+      }
+    }
 
     const inserted = [];
     for (let r = 1; r < rows.length; r++) {
@@ -529,6 +484,7 @@ async function commitCSV(csvText) {
           record[key] = val;
         }
       }
+
 
       // Skip rows without vendor or location
       if (!record.vendor || !record.location) continue;

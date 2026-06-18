@@ -38,6 +38,11 @@ textarea {
   margin: 0 auto;
 }
 
+.container.full-width {
+  width: calc(100% - 2rem);
+  max-width: none;
+}
+
 /* Header and nav */
 .nav-row {
   position: fixed;
@@ -355,6 +360,12 @@ textarea {
   line-height: 1.75;
 }
 
+.inventory-table td:last-child {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+}
+
 .button.small {
   padding: 0.75rem 1.2rem;
   font-size: 0.95rem;
@@ -394,8 +405,16 @@ textarea {
   justify-content: flex-start;
 }
 
+.dashboard-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
 .table-wrapper {
   overflow-x: auto;
+  margin-top: 1.5rem;
 }
 
 /* Inventory AI chat styles */
