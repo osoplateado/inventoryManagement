@@ -368,7 +368,6 @@ COUNTING RULES (follow exactly):
 - The "Qty" field is the number of containers in that row. Never count rows — always sum the Qty values.
 - When asked how many containers are available in total, add up every Qty value in the list.
 - When filtering (e.g. by size, location, type, condition), add up the Qty values only for matching rows.
-- Always show your arithmetic: list the matching rows with their Qty, then state the total.
 - If no rows match, say "0 containers found matching that criteria."
 
 LOCATION/PROXIMITY RULES (follow exactly):
