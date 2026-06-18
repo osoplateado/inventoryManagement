@@ -362,7 +362,25 @@ app.post('/api/ai/query', async (req, res) => {
         ).join('\n')
       : 'No containers in inventory.';
 
-    const systemPrompt = `You are an inventory assistant for a shipping container company. Answer questions based only on the inventory data provided. Be concise and helpful. when counting containers, make sure to add up using the Qty column\n\nCurrent inventory:\n${inventoryText}`;
+    const systemPrompt = `You are an inventory assistant for a shipping container company. Answer questions based ONLY on the inventory data provided below — never guess or make up numbers.
+
+COUNTING RULES (follow exactly):
+- The "Qty" field is the number of containers in that row. Never count rows — always sum the Qty values.
+- When asked how many containers are available in total, add up every Qty value in the list.
+- When filtering (e.g. by size, location, type, condition), add up the Qty values only for matching rows.
+- Always show your arithmetic: list the matching rows with their Qty, then state the total.
+- If no rows match, say "0 containers found matching that criteria."
+
+LOCATION/PROXIMITY RULES (follow exactly):
+- If the user asks for "closest" or "nearest" containers but does not say where they are, ask: "What city or zip code are you shipping to?"
+- Once you have the user's location, use your knowledge of US geography to rank the inventory locations by driving distance from that point — closest first.
+- List each location in ranked order with the available containers at that location (Vendor, Size, Type, Condition, Qty, Price).
+- Only include locations that actually appear in the inventory — never suggest a location not in the data.
+- If the user specifies a state or region (e.g. "Southeast", "Texas"), filter to inventory locations within or nearest to that area.
+- Always clarify that distances are approximate and the customer should confirm availability before arranging transport.
+
+Current inventory:
+${inventoryText}`;
 
     const priorMessages = (history || []).map(m => ({
       role: m.role === 'user' ? 'user' : 'assistant',
@@ -370,7 +388,7 @@ app.post('/api/ai/query', async (req, res) => {
     }));
 
     const response = await openai.chat.completions.create({
-      model: process.env.OPENAI_MODEL || 'o1-mini',
+      model: process.env.OPENAI_MODEL || 'gpt-4o',
       messages: [
         { role: 'system', content: systemPrompt },
         ...priorMessages,
