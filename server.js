@@ -61,8 +61,8 @@ function parseCsv(text) {
       cur = '';
       continue;
     }
-    if (ch === '\n' ) {
-      // handle CRLF
+    if (ch === '\r') continue; // strip CR from CRLF line endings
+    if (ch === '\n') {
       row.push(cur);
       rows.push(row);
       row = [];
@@ -156,20 +156,8 @@ async function initializeDatabase() {
       price TEXT,
       delivery TEXT,
       date TEXT,
-      notes TEXT
-    )
-  `);
-
-  await runStatement(`
-    CREATE TABLE IF NOT EXISTS email_summaries (
-      id UUID PRIMARY KEY,
-      email_to TEXT,
-      email_from TEXT,
-      subject TEXT,
-      body TEXT,
-      summary TEXT,
-      received_at TIMESTAMPTZ,
-      metadata JSONB
+      notes TEXT,
+      sender TEXT
     )
   `);
 
@@ -188,6 +176,7 @@ async function initializeDatabase() {
         delivery: 'FOB',
         date: '2026-06-07',
         notes: 'Limited availability',
+        sender: 'test@email.com',
       },
       {
         vendor: 'Delta Container Co.',
@@ -201,6 +190,7 @@ async function initializeDatabase() {
         delivery: 'Delivered',
         date: '2026-06-08',
         notes: 'Ready to ship',
+        sender: 'test@email.com',
       },
     ];
 
@@ -208,8 +198,8 @@ async function initializeDatabase() {
       await runStatement(
         `INSERT INTO containers (
           id, vendor, location, size, type, container_condition,
-          color, quantity, price, delivery, date, notes
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+          color, quantity, price, delivery, date, notes, sender
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
         [
           randomUUID(),
           record.vendor,
@@ -223,6 +213,7 @@ async function initializeDatabase() {
           record.delivery,
           record.date,
           record.notes,
+          record.sender ,
         ]
       );
     }
@@ -278,6 +269,7 @@ app.post('/api/containers', async (req, res) => {
     delivery,
     date,
     notes,
+    sender,
   } = req.body;
 
   const id = randomUUID();
@@ -286,8 +278,8 @@ app.post('/api/containers', async (req, res) => {
     await runStatement(
       `INSERT INTO containers (
         id, vendor, location, size, type, container_condition,
-        color, quantity, price, delivery, date, notes
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+        color, quantity, price, delivery, date, notes, sender
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
       [
         id,
         vendor,
@@ -301,6 +293,7 @@ app.post('/api/containers', async (req, res) => {
         delivery,
         date,
         notes,
+        from || null,
       ]
     );
 
@@ -317,6 +310,7 @@ app.post('/api/containers', async (req, res) => {
       delivery,
       date,
       notes,
+      sender: sender || null,
     });
   } catch (err) {
     handleDbError(res, err);
@@ -337,6 +331,7 @@ app.put('/api/containers/:id', async (req, res) => {
     delivery,
     date,
     notes,
+    sender,
   } = req.body;
 
   try {
@@ -352,8 +347,9 @@ app.put('/api/containers/:id', async (req, res) => {
         price = $8,
         delivery = $9,
         date = $10,
-        notes = $11
-      WHERE id = $12`,
+        notes = $11,
+        sender = $12
+      WHERE id = $13`,
       [
         vendor,
         location,
@@ -366,6 +362,7 @@ app.put('/api/containers/:id', async (req, res) => {
         delivery,
         date,
         notes,
+        sender || null,
         id,
       ]
     );
@@ -386,6 +383,7 @@ app.put('/api/containers/:id', async (req, res) => {
       delivery,
       date,
       notes,
+      sender: sender || null,
     });
   } catch (err) {
     handleDbError(res, err);
@@ -455,8 +453,6 @@ app.post('/email/inbound', async (req, res) => {
     // Collect useful pieces from common providers
     const responseBody = req.body;
     commitCSV(responseBody);
-    // console.log('Received raw email content:', req);
-    console.log('Received parsed email:', responseBody);
     
     const receivedAt = new Date();
 
@@ -468,7 +464,7 @@ app.post('/email/inbound', async (req, res) => {
 });
 
 async function commitCSV(csvText) {
-  
+
     const raw = csvText;
     if (!raw || raw.trim().length === 0) return res.status(400).json({ error: 'Empty body' });
 
@@ -476,7 +472,7 @@ async function commitCSV(csvText) {
     const cleaned = cleanThousandSeparatorsInDollarAmounts(raw);
 
     const rows = parseCsv(cleaned);
-    console.log('Parsed CSV rows:', rows);
+
     if (!rows || rows.length < 2) return ;
 
     const header = rows[0].map(h => (h || '').toString().trim());
@@ -492,6 +488,7 @@ async function commitCSV(csvText) {
       'Quantity': 'quantity',
       'Price': 'price',
       'Other Details': 'notes',
+      'Email Sender': 'sender',
     };
 
     const mappedHeaders = header.map(h => mapping[h] || null);
@@ -513,6 +510,7 @@ async function commitCSV(csvText) {
         delivery: null,
         date: null,
         notes: null,
+        sender: null,
       };
 
       for (let i = 0; i < mappedHeaders.length; i++) {
@@ -539,8 +537,8 @@ async function commitCSV(csvText) {
       await runStatement(
         `INSERT INTO containers (
           id, vendor, location, size, type, container_condition,
-          color, quantity, price, delivery, date, notes
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+          color, quantity, price, delivery, date, notes, sender
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
         [
           randomUUID(),
           record.vendor,
@@ -554,6 +552,7 @@ async function commitCSV(csvText) {
           record.delivery || '',
           record.date || '',
           record.notes || '',
+          record.sender || '',
         ]
       );
       inserted.push(record);

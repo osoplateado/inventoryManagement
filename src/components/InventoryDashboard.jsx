@@ -51,13 +51,14 @@ function InventoryDashboard({
                 <th>Delivery</th>
                 <th>Date</th>
                 <th>Notes</th>
+                <th>Sender</th>
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody>
               {filteredRecords.length === 0 ? (
                 <tr>
-                  <td colSpan="12" className="empty-state">
+                  <td colSpan="13" className="empty-state">
                     No matching container records found.
                   </td>
                 </tr>
@@ -75,6 +76,7 @@ function InventoryDashboard({
                     <td>{record.delivery}</td>
                     <td>{formatDate(record.date)}</td>
                     <td>{record.notes || ''}</td>
+                    <td>{record.sender }</td>
                     <td>
                       <button type="button" className="button secondary small" onClick={() => openEditModal(record)}>
                         Edit

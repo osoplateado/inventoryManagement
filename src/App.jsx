@@ -19,6 +19,7 @@ const initialFormState = {
   delivery: '',
   date: '',
   notes: '',
+  sender: '',
 };
 
 function formatDate(value) {
@@ -72,6 +73,7 @@ function App() {
         record.color,
         record.delivery,
         record.notes,
+        record.sender,
       ]
         .join(' ')
         .toLowerCase();

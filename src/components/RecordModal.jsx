@@ -52,6 +52,10 @@ function RecordModal({ editingId, formState, onClose, onChange, onSubmit }) {
               <span>Date received</span>
               <input name="date" type="date" value={formState.date} onChange={onChange} required />
             </label>
+            <label>
+              <span>Sender</span>
+              <input name="sender" value={formState.sender} onChange={onChange} placeholder="Origin / Source" />
+            </label>
             <label className="full-width">
               <span>Notes</span>
               <textarea name="notes" rows="3" value={formState.notes} onChange={onChange} placeholder="Optional notes" />
