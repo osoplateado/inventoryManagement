@@ -132,3 +132,8 @@ TODO:
 - make AI model loaded through ENV VAR
 
 curl -X POST "http://localhost:3000/email/inbound" --data-binary @test.csv -H "Content-Type: text/csv"
+
+psql $DATABASE_URL
+
+SELECT SUM(quantity) AS total_containers FROM containers;
+ SELECT COUNT(*) AS total_rows FROM containers;
