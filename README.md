@@ -134,3 +134,7 @@ Cost:
 - 6/month for a database
 - domain
 - email sumerization. Free if below a certain credit threshold
+psql $DATABASE_URL
+
+SELECT SUM(quantity) AS total_containers FROM containers;
+ SELECT COUNT(*) AS total_rows FROM containers;
