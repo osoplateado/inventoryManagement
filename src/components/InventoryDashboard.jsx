@@ -44,7 +44,7 @@ function InventoryDashboard({
           <table className="inventory-table">
             <thead>
               <tr>
-                <th>Vendor</th>
+                <th>Depot</th>
                 <th>Location</th>
                 <th>Size</th>
                 <th>Type</th>
@@ -55,7 +55,7 @@ function InventoryDashboard({
                 <th>Delivery</th>
                 <th>Date</th>
                 <th>Notes</th>
-                <th>Sender</th>
+                <th>Vendor</th>
                 <th>Actions</th>
               </tr>
             </thead>

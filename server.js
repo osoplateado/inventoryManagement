@@ -373,7 +373,7 @@ COUNTING RULES (follow exactly):
 LOCATION/PROXIMITY RULES (follow exactly):
 - If the user asks for "closest" or "nearest" containers but does not say where they are, ask: "What city or zip code are you shipping to?"
 - Once you have the user's location, use your knowledge of US geography to rank the inventory locations by driving distance from that point — closest first.
-- List each location in ranked order with the available containers at that location (Vendor, Size, Type, Condition, Qty, Price).
+- List each location in ranked order with the available containers at that location (Vendor, Size, Type, Condition, Qty, Price, Sender).
 - Only include locations that actually appear in the inventory — never suggest a location not in the data.
 - If the user specifies a state or region (e.g. "Southeast", "Texas"), filter to inventory locations within or nearest to that area.
 - Always clarify that distances are approximate and the customer should confirm availability before arranging transport.
@@ -453,7 +453,8 @@ async function commitCSV(csvText) {
 
     // Map CSV columns to containers table columns
     const mapping = {
-      'Vendor': 'vendor',
+      'Vendor': 'sender',
+      'Depot': 'vendor',
       'Location': 'location',
       'Size': 'size',
       'Type': 'type',
@@ -462,7 +463,6 @@ async function commitCSV(csvText) {
       'Quantity': 'quantity',
       'Price': 'price',
       'Other Details': 'notes',
-      'Email Sender': 'sender',
       'date': 'date',
     };
 

@@ -30,7 +30,6 @@ A simple shipping container inventory dashboard backed by Node and PostgreSQL.
 ## Notes
 
 - This app now uses PostgreSQL only.
-- Sample data is seeded on first run if the database is empty.
 - Build the React frontend before starting the server in production.
 
 ## Using a hosted PostgreSQL database
@@ -78,9 +77,7 @@ https://<your-ngrok-id>.ngrok.io/email/inbound
 Test the webhook with curl:
 
 ```bash
-curl -X POST 'https://<your-ngrok-id>.ngrok.io/email/inbound' \
-  -H 'Content-Type: application/json' \
-  -d '{"to":"inventory@robertgraman.com","from":"sender@example.com","subject":"Test","text":"Hello inventory"}'
+curl -X POST "http://localhost:3000/email/inbound" --data-binary @test.csv -H "Content-Type: text/csv"
 ```
 
 Retrieve summaries from the backend:
@@ -132,3 +129,8 @@ TODO:
 - make AI model loaded through ENV VAR
 
 curl -X POST "http://localhost:3000/email/inbound" --data-binary @test.csv -H "Content-Type: text/csv"
+
+Cost:
+- 6/month for a database
+- domain
+- email sumerization. Free if below a certain credit threshold

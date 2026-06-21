@@ -9,6 +9,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "start": "node server.js",
+    "dev:server": "nodemon server.js",
+    "dev:all": "concurrently \"npm run dev\" \"npm run dev:server\"",
     "import-sql": "node import-sql.js"
   },
   "dependencies": {
@@ -21,6 +23,8 @@
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.7.0",
+    "concurrently": "^10.0.3",
+    "nodemon": "^3.1.14",
     "vite": "^5.4.21"
   }
 }

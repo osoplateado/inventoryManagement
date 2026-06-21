@@ -61,10 +61,12 @@ function Header({ page, heroStyles, onHeroMove, onHeroLeave, navigateTo }) {
 
       {page === 'home' && (
         <div className="hero-content">
-          <p className="eyebrow">Full Stack Web Developer</p>
-          <h2>Hi, I’m a developer building clean, practical web apps for small businesses.</h2>
+          <p className="eyebrow">Full Stack Software Engineerrs</p>
+          <h2>Hi, I’m a developer building clean, practical apps</h2>
+          <hr></hr>
+          <h3> I am the most experiences in back end development, but I am expanding my front end knowledge by working on projects for small companies</h3>
           <p className="hero-text">
-            I create modern user experiences with React and Node.js, and I ship tools that solve real operations
+            I have created modern user experiences with React and Node.js, and I ship tools that solve real operations
             problems for inventory, logistics, and business workflows.
           </p>
           <div className="hero-actions">
