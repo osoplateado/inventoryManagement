@@ -1,4 +1,3 @@
-import React from 'react';
 import InventoryAgent from './InventoryAgent';
 
 function InventoryWelcome({ navigateTo }) {

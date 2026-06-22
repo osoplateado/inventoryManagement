@@ -1,5 +1,3 @@
-import React from 'react';
-
 function RecordModal({ editingId, formState, onClose, onChange, onSubmit }) {
   return (
     <div className="modal" onClick={onClose}>

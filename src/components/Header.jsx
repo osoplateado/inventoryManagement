@@ -1,5 +1,3 @@
-import React from 'react';
-
 function Header({ page, heroStyles, onHeroMove, onHeroLeave, navigateTo }) {
   return (
     <header

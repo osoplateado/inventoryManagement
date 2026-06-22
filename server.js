@@ -14,11 +14,6 @@ function handleDbError(res, err) {
   res.status(500).json({ error: 'Database error' });
 }
 
-async function getRow(sql, params = []) {
-  const result = await db.query(sql, params);
-  return result.rows[0];
-}
-
 async function getRows(sql, params = []) {
   const result = await db.query(sql, params);
   return result.rows;
@@ -85,26 +80,6 @@ function cleanThousandSeparatorsInDollarAmounts(text) {
 }
 
 
-async function summarizeEmail({ to, from, subject, text }) {
-  if (!process.env.OPENAI_API_KEY) {
-    console.warn('OPENAI_API_KEY is not set. Skipping AI summary.');
-    return 'OpenAI API key not configured. Summary unavailable.';
-  }
-
-  const prompt = `Email received by inventory@robertgraman.com from ${from} with subject \"${subject}\" and body \n${text}`;
-
-  const response = await openai.chat.completions.create({
-    model: MINI_MODEL,
-    messages: [
-      { role: 'system', content: 'You are an assistant that summarizes inbound email messages for a shipping container inventory manager. Create a concise summary of the email, including the sender, location, size, type, container condition, color, quantity, price, and any other details.' },
-      { role: 'user', content: prompt },
-    ],
-    max_tokens: 250,
-  });
-
-  console.log('OpenAI response:', response?.choices?.[0]?.message?.content?.trim() || 'No summary generated.');
-  return response?.choices?.[0]?.message?.content?.trim() || 'No summary generated.';
-}
 
 async function initializePostgres() {
   const connectionString = process.env.DATABASE_URL;
@@ -235,7 +210,7 @@ app.post('/api/containers', async (req, res) => {
         delivery,
         date,
         notes,
-        from || null,
+        sender || null,
       ]
     );
 
@@ -576,15 +551,10 @@ async function summarizeContainerResults(query, rows, history) {
   // For aggregated results, build the formatted table in JS so the model
   // never has to decide which locations to include.
   let inventoryText;
-  let preformattedTable = null;
 
   if (!rows.length) {
     inventoryText = 'No containers matched that criteria.';
   } else if (USE_AGGREGATED) {
-    const lines = Object.entries(byLocation).map(([key, d]) =>
-      `- **${displayName[key]}**: ${d.qty} containers | Sizes: ${[...d.sizes].join(', ')} | Types: ${[...d.types].join(', ')} | Conditions: ${[...d.conditions].join(', ')}`
-    );
-    preformattedTable = `**${totalQuantity} total containers across ${locationCount} locations:**\n${lines.join('\n')}`;
     inventoryText = Object.entries(byLocation).map(([key, d]) => {
       const numericPrices = d.prices.map(p => parseFloat(String(p).replace(/[^0-9.]/g, ''))).filter(n => !isNaN(n) && n > 0);
       const priceStr = numericPrices.length
@@ -880,7 +850,7 @@ app.post('/email/inbound', async (req, res) => {
 async function commitCSV(csvText) {
 
     const raw = csvText;
-    if (!raw || raw.trim().length === 0) return res.status(400).json({ error: 'Empty body' });
+    if (!raw || raw.trim().length === 0) return;
 
     // Clean common thousand separators in dollar amounts so CSV columns align
     const cleaned = cleanThousandSeparatorsInDollarAmounts(raw);
