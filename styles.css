@@ -257,6 +257,24 @@ textarea {
   gap: 1rem;
 }
 
+/* Snake cursor */
+
+.snake-dot {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  background-image:
+    radial-gradient(circle, rgba(255, 255, 255, 0.95) 2px, transparent 4px),
+    radial-gradient(circle, rgba(255, 255, 255, 0.95) 2px, transparent 4px);
+  background-size: 40px 40px, 40px 40px;
+  background-position: 0 0, 20px 20px;
+  background-repeat: repeat;
+}
+
+
 /* Panels and cards */
 .panel {
   margin-top: 1.75rem;
@@ -848,7 +866,7 @@ textarea {
   /* Hero content: full width on mobile */
   .hero-content {
     max-width: 100%;
-    padding: 0;
+    padding: 0 1.25rem;
     margin-top: 2rem;
   }
 

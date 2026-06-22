@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Route, Routes, useLocation, useNavigate } from 'react-router-dom';
+import CursorSnake from './components/CursorSnake';
 import Footer from './components/Footer';
 import Header from './components/Header';
 import HomePage from './components/HomePage';
@@ -197,7 +198,8 @@ function App() {
   }
 
   return (
-    <div>
+    <div className={page === 'home' ? 'home-page' : ''}>
+      {page === 'home' && <CursorSnake />}
       <Header page={page} heroStyles={heroStyles} onHeroMove={handleHeroMove} onHeroLeave={handleHeroLeave} navigateTo={navigateTo} />
 
       <main className={`container${location.pathname === '/inventory/list' ? ' full-width' : ''}`}>
