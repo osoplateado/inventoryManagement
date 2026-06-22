@@ -59,6 +59,14 @@ function App() {
     }
   }, [page]);
 
+  useEffect(() => {
+    if (location.pathname !== '/inventory/list') {
+      setModalOpen(false);
+      setEditingId(null);
+      setFormState(initialFormState);
+    }
+  }, [location.pathname]);
+
   const filteredRecords = useMemo(() => {
     const normalized = search.trim().toLowerCase();
     if (!normalized) return records;
@@ -216,7 +224,7 @@ function App() {
         </Routes>
       </main>
 
-      {modalOpen && (
+      {modalOpen && location.pathname === '/inventory/list' && (
         <RecordModal
           editingId={editingId}
           formState={formState}

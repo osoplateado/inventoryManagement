@@ -363,8 +363,12 @@ async function classifyIntent(query) {
       {
         role: 'system',
         content:
-          'Classify the user query as either "structured_query" (asking for containers by size, location, type, price, quantity, condition, color, sort, availability) ' +
-          'or "knowledge_question" (asking about free-text notes, damage comments, specific descriptions written in notes, or qualitative observations). ' +
+          'Classify the user query as "structured_query" or "knowledge_question".\n' +
+          '"structured_query": counting containers, asking how many exist, asking about size/location/type/price/quantity/condition/color/availability/sort. ' +
+          'Examples: "how many containers are available", "how many 40ft do you have", "list all containers", "cheapest containers near Dallas".\n' +
+          '"knowledge_question": ONLY when the user explicitly asks about free-text notes, damage descriptions, or qualitative written observations in notes. ' +
+          'Examples: "which containers have rust noted", "show containers with damage in the notes".\n' +
+          'When in doubt, use "structured_query".\n' +
           'Reply with JSON only: {"intent":"structured_query"} or {"intent":"knowledge_question"}',
       },
       { role: 'user', content: query },
@@ -404,13 +408,17 @@ Schema (all fields optional, use null when not specified):
   "noteKeywords": string | null
 }
 
+IMPORTANT: "noteKeywords" is ONLY for searching the free-text notes field. NEVER put generic phrases like "available", "for sale", "in stock", or "available for sale" into noteKeywords — these are natural language and do not filter notes. If the user says "available for sale" or "in stock", treat it as a count/listing query with no noteKeywords.
+
 INHERITANCE RULE: If the current message references a previous result ("from that list", "those results", "cheapest/most expensive from that", etc.) WITHOUT specifying a new location or distance, inherit location and maxDistance from the most recent user message in conversation history that contained them.
 If the current message specifies explicit new values (a city, a mileage), use those instead — do not inherit.
 
 Examples:
 - "40ft high cube in Denver under $3000" → {"size":"40","type":"HC","location":"Denver","maxPrice":3000}
 - "cheapest containers near Houston" → {"location":"Houston","sort":"price_asc"}
-- "how many 20ft are available" → {"size":"20"}
+- "how many 20ft are available" → {"size":"20","noteKeywords":null}
+- "how many 40 foot containers are available for sale" → {"size":"40","noteKeywords":null}
+- "how many containers are available for sale" → {"noteKeywords":null}
 - "containers within 500 miles of Dallas" → {"location":"Dallas","maxDistance":500}
 - "list all containers within 1000 miles of Saint Louis MO" → {"location":"Saint Louis","maxDistance":1000}
 - "cheapest from that list" (history had "within 500 miles of Saint Louis") → {"location":"Saint Louis","maxDistance":500,"sort":"price_asc"}`,
@@ -431,8 +439,8 @@ function buildSqlFromFilters(filters) {
   const params = [];
 
   if (filters.size) {
-    params.push(filters.size);
-    conditions.push(`size = $${params.length}`);
+    params.push(`${filters.size}%`);
+    conditions.push(`size ILIKE $${params.length}`);
   }
   if (filters.type) {
     params.push(`%${filters.type}%`);
@@ -540,7 +548,7 @@ async function summarizeContainerResults(query, rows, history) {
     const raw = r.location || 'Unknown';
     const key = locKey(raw);
     if (!byLocation[key]) {
-      byLocation[key] = { qty: 0, sizes: new Set(), types: new Set(), conditions: new Set(), prices: [], vendors: new Set(), rows: [] };
+      byLocation[key] = { qty: 0, sizes: new Set(), types: new Set(), conditions: new Set(), prices: [], vendors: new Set(), senders: new Set(), rows: [] };
       rawNamesByKey[key] = new Set();
     }
     rawNamesByKey[key].add(raw);
@@ -551,6 +559,7 @@ async function summarizeContainerResults(query, rows, history) {
     if (r.container_condition) entry.conditions.add(r.container_condition);
     if (r.price) entry.prices.push(r.price);
     if (r.vendor) entry.vendors.add(r.vendor);
+    if (r.sender) entry.senders.add(r.sender);
     entry.rows.push(r);
   }
 
@@ -581,24 +590,33 @@ async function summarizeContainerResults(query, rows, history) {
       const priceStr = numericPrices.length
         ? `$${Math.min(...numericPrices).toLocaleString()} – $${Math.max(...numericPrices).toLocaleString()}`
         : 'N/A';
-      return `Location: ${displayName[key]} | Total Qty: ${d.qty} | Sizes: ${[...d.sizes].join(', ')} | Types: ${[...d.types].join(', ')} | Conditions: ${[...d.conditions].join(', ')} | Price range: ${priceStr} | Vendors: ${[...d.vendors].join(', ')}`;
+      const sendersStr = d.senders.size ? ` | Contacts: ${[...d.senders].join(', ')}` : '';
+      return `Location: ${displayName[key]} | Total Qty: ${d.qty} | Sizes: ${[...d.sizes].join(', ')} | Types: ${[...d.types].join(', ')} | Conditions: ${[...d.conditions].join(', ')} | Price range: ${priceStr} | Vendors: ${[...d.vendors].join(', ')}${sendersStr}`;
     }).join('\n');
   } else {
     const displayRows = isPriceQuery ? rows.slice(0, 15) : rows;
     inventoryText = displayRows.map(r =>
-      `Vendor: ${r.vendor}, Location: ${r.location}, Size: ${r.size}ft, Type: ${r.type}, Condition: ${r.container_condition}, Color: ${r.color}, Qty: ${r.quantity}, Price: ${r.price}, Delivery: ${r.delivery || ''}${r.notes ? ', Notes: ' + r.notes : ''}`
+      `Vendor: ${r.vendor}, Location: ${r.location}, Size: ${r.size}ft, Type: ${r.type}, Condition: ${r.container_condition}, Color: ${r.color}, Qty: ${r.quantity}, Price: ${r.price}, Delivery: ${r.delivery || ''}${r.sender ? ', Contact: ' + r.sender : ''}${r.notes ? ', Notes: ' + r.notes : ''}`
     ).join('\n');
   }
 
-  // For listing queries with many locations, return the JS-formatted table directly
-  // so the model cannot selectively omit locations.
+  // For listing queries always build the response directly in JS so the LLM
+  // cannot selectively omit rows or locations.
   const isListingQuery = /list|show|what.*available|within.*mile|all container/i.test(query);
-  if (preformattedTable && isListingQuery) {
-    return preformattedTable;
+  if (isListingQuery) {
+    if (rows.length === 0) return 'No containers matched that criteria.';
+    const sections = Object.entries(byLocation).map(([key, d]) => {
+      const lines = d.rows.map(r =>
+        `  - ${r.vendor}: ${r.size} ${r.type}, ${r.container_condition}, ${r.color}, Qty: ${r.quantity}, Price: ${r.price}${r.delivery ? ', Delivery: ' + r.delivery : ''}${r.sender ? ', Contact: ' + r.sender : ''}${r.notes ? ', Notes: ' + r.notes : ''}`
+      ).join('\n');
+      return `**${displayName[key]}** (${d.qty} containers):\n${lines}`;
+    });
+    return `**${totalQuantity} total containers across ${locationCount} location${locationCount === 1 ? '' : 's'}:**\n\n${sections.join('\n\n')}`;
   }
 
   const systemContent = `You are an inventory assistant for a shipping container company.
 IMPORTANT: The inventory data block below is the ONLY source of truth for this response. Any inventory data in the conversation history is from a previous query and must be ignored — use only what is shown here. Never invent numbers.
+IMPORTANT: All rows below have already been pre-filtered to match the user's criteria, including any distance or proximity requirements. Do NOT question whether the results are within range — they already are. Answer the user's question directly using only the data provided.
 
 Total containers across all results: ${totalQuantity}
 
@@ -619,88 +637,132 @@ ${inventoryText}`;
   return (response.choices[0].message.content ?? '').trim() || 'No answer generated.';
 }
 
-// Approximate coordinates for cities that appear in inventory
-const CITY_COORDS = {
-  'atlanta': [33.749, -84.388],
-  'baltimore': [39.290, -76.612],
-  'boston': [42.360, -71.059],
-  'calgary': [51.045, -114.072],
-  'charleston': [32.777, -79.931],
-  'chicago': [41.878, -87.630],
-  'cincinnati': [39.103, -84.512],
-  'cleveland': [41.499, -81.694],
-  'columbus': [39.961, -82.999],
-  'dallas': [32.777, -96.797],
-  'denver': [39.739, -104.990],
-  'detroit': [42.331, -83.046],
-  'edmonton': [53.546, -113.494],
-  'el paso': [31.762, -106.485],
-  'halifax': [44.649, -63.575],
-  'houston': [29.760, -95.370],
-  'indianapolis': [39.768, -86.158],
-  'jacksonville': [30.332, -81.656],
-  'kansas city': [39.100, -94.579],
-  'los angeles': [34.052, -118.244],
-  'louisville': [38.253, -85.759],
-  'memphis': [35.150, -90.049],
-  'miami': [25.762, -80.192],
-  'minneapolis': [44.978, -93.265],
-  'mobile': [30.695, -88.040],
-  'montreal': [45.502, -73.567],
-  'nashville': [36.163, -86.782],
-  'new orleans': [29.951, -90.072],
-  'new york': [40.713, -74.006],
-  'norfolk': [36.851, -76.286],
-  'oakland': [37.804, -122.271],
-  'omaha': [41.257, -95.935],
-  'regina': [50.445, -104.619],
-  'saint louis': [38.627, -90.199],
-  'st. louis': [38.627, -90.199],
-  'st louis': [38.627, -90.199],
-  'salt lake city': [40.761, -111.891],
-  'saskatoon': [52.133, -106.670],
-  'savannah': [32.084, -81.100],
-  'seattle': [47.606, -122.332],
-  'tacoma': [47.253, -122.444],
-  'tampa': [27.951, -82.457],
-  'toronto': [43.653, -79.383],
-  'vancouver': [49.283, -123.121],
-  'wilmington': [34.226, -77.945],
-  'winnipeg': [49.895, -97.138],
-};
+const geocodeCache = new Map();
+let geocodeCacheReady = false;
 
-function haversineMiles(lat1, lon1, lat2, lon2) {
-  const R = 3958.8;
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLon = (lon2 - lon1) * Math.PI / 180;
-  const a = Math.sin(dLat / 2) ** 2 +
-    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+async function geocodeBatch(locations) {
+  const uncached = [...new Set(locations.map(s => s.trim()).filter(Boolean))]
+    .filter(loc => !geocodeCache.has(loc.toLowerCase()));
+  if (uncached.length === 0) return;
+
+  const response = await openai.chat.completions.create({
+    model: 'gpt-4o-mini',
+    messages: [
+      {
+        role: 'system',
+        content: 'You are a geocoding service. Return a JSON object where each key is the EXACT location string provided and the value is [latitude, longitude]. Include ALL locations. Use city-center coordinates.',
+      },
+      { role: 'user', content: uncached.join('\n') },
+    ],
+    temperature: 0,
+    max_tokens: 2000,
+    response_format: { type: 'json_object' },
+  });
+
+  const raw = extractJson(response.choices[0].message.content) ?? {};
+  for (const [k, v] of Object.entries(raw)) {
+    if (Array.isArray(v) && v.length === 2 && typeof v[0] === 'number') {
+      geocodeCache.set(k.toLowerCase(), v);
+    }
+  }
+}
+
+async function geocodeCities(locationStrings) {
+  await geocodeBatch(locationStrings);
+  const result = {};
+  for (const loc of locationStrings) {
+    const key = loc.trim().toLowerCase();
+    const coords = geocodeCache.get(key);
+    if (coords) result[key] = coords;
+  }
+  return result;
+}
+
+async function warmGeocodeCache() {
+  try {
+    const rows = await getRows('SELECT DISTINCT location FROM containers WHERE location IS NOT NULL');
+    const locations = rows.map(r => r.location).filter(Boolean);
+    console.log(`Warming geocode cache for ${locations.length} locations...`);
+    await geocodeBatch(locations);
+    geocodeCacheReady = true;
+    console.log(`Geocode cache ready: ${geocodeCache.size} entries`);
+  } catch (err) {
+    console.error('Geocode cache warm-up failed:', err.message);
+  }
+}
+
+async function getDrivingDistances(targetCoords, destCoordsMap) {
+  // destCoordsMap: { 'city key': [lat, lon] }
+  const entries = Object.entries(destCoordsMap);
+  if (entries.length === 0) return {};
+
+  // OSRM expects lon,lat order
+  const coordStr = [targetCoords, ...entries.map(([, c]) => c)]
+    .map(([lat, lon]) => `${lon},${lat}`)
+    .join(';');
+
+  const url = `http://router.project-osrm.org/table/v1/driving/${coordStr}?sources=0&annotations=distance`;
+  console.log('OSRM url:', url);
+
+  let data;
+  try {
+    const resp = await fetch(url);
+    data = await resp.json();
+  } catch (err) {
+    console.error('OSRM fetch error:', err.message);
+    return {};
+  }
+
+  console.log('OSRM response code:', data.code, '| distances row length:', data.distances?.[0]?.length);
+
+  // distances[0] is source→each coord in meters; index 0 = source→itself (0)
+  const distances = data.distances?.[0];
+  if (!distances) return {};
+
+  const result = {};
+  entries.forEach(([key], i) => {
+    const meters = distances[i + 1];
+    result[key] = meters != null ? meters / 1609.344 : null;
+  });
+  console.log('driving distances (miles):', result);
+  return result;
 }
 
 async function filterByDistance(targetLocation, maxDistanceMiles, rows) {
-  const targetKey = targetLocation.split(',')[0].trim().toLowerCase();
-  const targetCoords = CITY_COORDS[targetKey];
+  const targetKey = targetLocation.trim().toLowerCase();
+  const rowLocations = rows.map(r => (r.location || '').trim());
 
+  const coords = await geocodeCities([targetLocation.trim(), ...rowLocations]);
+  console.log('geocoded coords keys:', Object.keys(coords));
+  console.log('looking up target key:', targetKey);
+
+  const targetCoords = coords[targetKey];
   if (!targetCoords) {
-    console.warn(`filterByDistance: no coordinates for "${targetLocation}", skipping distance filter`);
+    console.warn(`filterByDistance: could not geocode "${targetLocation}", skipping distance filter`);
     return rows;
   }
 
+  const destCoordsMap = {};
+  for (const loc of rowLocations) {
+    const key = loc.toLowerCase();
+    if (coords[key]) destCoordsMap[key] = coords[key];
+  }
+
+  const drivingDistances = await getDrivingDistances(targetCoords, destCoordsMap);
+
   const unknownCities = [];
   const filtered = rows.filter(r => {
-    const cityKey = (r.location || '').split(',')[0].trim().toLowerCase();
-    const coords = CITY_COORDS[cityKey];
-    if (!coords) {
+    const key = (r.location || '').trim().toLowerCase();
+    const distMiles = drivingDistances[key];
+    if (distMiles == null) {
       unknownCities.push(r.location);
       return false;
     }
-    const dist = haversineMiles(targetCoords[0], targetCoords[1], coords[0], coords[1]);
-    return dist <= maxDistanceMiles;
+    return distMiles <= maxDistanceMiles;
   });
 
   if (unknownCities.length > 0) {
-    console.warn('filterByDistance: unknown cities (excluded):', [...new Set(unknownCities)]);
+    console.warn('filterByDistance: no driving route found (excluded):', [...new Set(unknownCities)]);
   }
 
   return filtered;
@@ -718,6 +780,8 @@ app.post('/api/ai/query', async (req, res) => {
     const { query, history } = req.body;
     if (!query || typeof query !== 'string') return res.status(400).json({ error: 'Query text required' });
 
+    console.log('AI query:', query);
+
     if (!process.env.OPENAI_API_KEY) {
       return res.status(503).json({ error: 'OpenAI API key not configured.' });
     }
@@ -727,6 +791,12 @@ app.post('/api/ai/query', async (req, res) => {
     let rows;
     if (intent === 'knowledge_question') {
       rows = await searchNotesSemantically(query);
+      if (rows.length === 0) {
+        // Fallback: re-run as structured query in case the classifier misfired
+        const filters = await generateFilters(query, history);
+        const { sql, params } = buildSqlFromFilters(filters);
+        rows = await getRows(sql, params);
+      }
     } else {
       const filters = await generateFilters(query, history);
 
@@ -768,6 +838,10 @@ app.post('/api/ai/query', async (req, res) => {
     console.error('AI query error:', err);
     res.status(500).json({ error: err.message || 'AI query failed.' });
   }
+});
+
+app.get('/api/geocode-status', (req, res) => {
+  res.json({ ready: geocodeCacheReady });
 });
 
 app.get('/api/email-summaries', async (req, res) => {
@@ -920,6 +994,7 @@ initializeDatabase()
       console.log(`Server listening on http://localhost:${port}`);
       console.log('Using PostgreSQL database');
     });
+    warmGeocodeCache();
   })
   .catch((err) => {
     console.error('Database initialization failed:', err);

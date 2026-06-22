@@ -4,6 +4,7 @@ function InventoryAgent() {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [messages, setMessages] = useState([]);
+  const [geocodeReady, setGeocodeReady] = useState(false);
   const messagesRef = useRef(null);
 
   useEffect(() => {
@@ -11,6 +12,20 @@ function InventoryAgent() {
       messagesRef.current.scrollTop = messagesRef.current.scrollHeight;
     }
   }, [messages, loading]);
+
+  useEffect(() => {
+    if (geocodeReady) return;
+    const check = async () => {
+      try {
+        const resp = await fetch('/api/geocode-status');
+        const data = await resp.json();
+        if (data.ready) setGeocodeReady(true);
+      } catch {}
+    };
+    check();
+    const interval = setInterval(check, 3000);
+    return () => clearInterval(interval);
+  }, [geocodeReady]);
 
   async function sendQuery(text) {
     if (!text) return;
@@ -77,6 +92,11 @@ function InventoryAgent() {
           <button type="submit" className="button primary" disabled={loading}>
             {loading ? 'Searching...' : 'Ask'}
           </button>
+          {!geocodeReady && (
+            <div className="geocode-status" title="Server is loading location data for distance queries. This takes ~30s on startup.">
+              <span className="geocode-spinner" aria-label="Loading location data" />
+            </div>
+          )}
         </form>
       </div>
     </section>
