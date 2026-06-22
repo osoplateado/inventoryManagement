@@ -83,6 +83,7 @@ function HomePage({ navigateTo }) {
         </div>
         <div className="cards-grid">
           <article className="card">
+            <img src="/inventoryExample.png" alt="Shipping Container Inventory screenshot" className="card-screenshot" />
             <h3>Shipping Container Inventory</h3>
             <p>A full-stack dashboard for managing container inventory with search, add, edit, and delete workflows.</p>
             <div className="badge-row">

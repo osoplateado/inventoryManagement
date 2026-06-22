@@ -214,11 +214,41 @@ textarea {
 
 .hero-content {
   position: relative;
-  z-index: 1;
+  z-index: 10001;
   max-width: min(85vw, 1300px);
   width: 100%;
   margin: 4rem auto 0;
   padding: 0;
+}
+
+.hero-body {
+  display: flex;
+  align-items: center;
+  gap: 4rem;
+}
+
+.hero-text-col {
+  flex: 1;
+  min-width: 0;
+}
+
+.hero-photo-col {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.25rem;
+}
+
+.hero-photo {
+  width: 260px;
+  height: 260px;
+  border-radius: 50%;
+  object-fit: cover;
+  object-position: center top;
+  border: 3px solid rgba(148, 163, 184, 0.25);
+  box-shadow: 0 0 40px rgba(59, 130, 246, 0.2);
+  display: block;
 }
 
 .hero-content .eyebrow {
@@ -257,6 +287,16 @@ textarea {
   gap: 1rem;
 }
 
+.hero-resume-btn {
+  position: relative;
+  z-index: 10000;
+  background: #7c3aed;
+}
+
+.hero-resume-btn:hover {
+  background: #6d28d9;
+}
+
 /* Snake cursor */
 
 .snake-dot {
@@ -265,7 +305,6 @@ textarea {
   pointer-events: none;
   z-index: 9999;
   opacity: 0;
-  transition: opacity 0.3s ease;
   background-image:
     radial-gradient(circle, rgba(255, 255, 255, 0.95) 2px, transparent 4px),
     radial-gradient(circle, rgba(255, 255, 255, 0.95) 2px, transparent 4px);
@@ -283,6 +322,10 @@ textarea {
   border-radius: 1.25rem;
   padding: 2rem;
   box-shadow: 0 30px 80px rgba(0, 0, 0, 0.25);
+}
+
+.welcome-actions {
+  margin-top: 2rem;
 }
 
 .section-intro {
@@ -443,6 +486,15 @@ textarea {
   border: 1px solid rgba(148, 163, 184, 0.12);
   border-radius: 1.25rem;
   padding: 1.75rem;
+}
+
+.card-screenshot {
+  width: calc(100% + 3.5rem);
+  margin: -1.75rem -1.75rem 1.5rem;
+  display: block;
+  border-radius: 1.25rem 1.25rem 0 0;
+  object-fit: cover;
+  max-height: 200px;
 }
 
 .card h3 {
@@ -868,6 +920,17 @@ textarea {
     max-width: 100%;
     padding: 0 1.25rem;
     margin-top: 2rem;
+  }
+
+  .hero-body {
+    flex-direction: column-reverse;
+    gap: 2rem;
+    align-items: flex-start;
+  }
+
+  .hero-photo {
+    width: 120px;
+    height: 120px;
   }
 
   .site-header {
