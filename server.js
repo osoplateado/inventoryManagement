@@ -882,6 +882,7 @@ async function commitCSV(csvText) {
     // Some senders' data should never be wiped on import (e.g. it's manually curated).
     const PROTECTED_SENDERS = [
       'mspence1290@gmail.com',
+      'sales@tri-statecontainers.com',
       'betobeast1246@gmail.com',
       'robertgraman1246@gmail.com',
     ];
