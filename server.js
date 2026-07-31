@@ -878,14 +878,22 @@ async function commitCSV(csvText) {
 
     const mappedHeaders = header.map(h => mapping[h] || null);
 
-    // Determine sender from the first data row and delete their existing entries
+    // Determine sender from the first data row and delete their existing entries.
+    // Some senders' data should never be wiped on import (e.g. it's manually curated).
+    const PROTECTED_SENDERS = [
+      'mspence1290@gmail.com',
+      'betobeast1246@gmail.com',
+      'robertgraman1246@gmail.com',
+    ];
     const senderColIndex = mappedHeaders.indexOf('sender');
     if (senderColIndex !== -1) {
       const firstDataRow = rows[1];
       const sender = (firstDataRow?.[senderColIndex] || '').toString().trim().replace(/^"|"$/g, '');
-      if (sender) {
+      if (sender && !PROTECTED_SENDERS.includes(sender.toLowerCase())) {
         const deleted = await runStatement('DELETE FROM containers WHERE sender = $1', [sender]);
         console.log(`Deleted ${deleted.rowCount} existing rows for sender: ${sender}`);
+      } else if (sender) {
+        console.log(`Skipping delete for protected sender: ${sender}`);
       }
     }
 
