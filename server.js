@@ -723,6 +723,71 @@ async function warmGeocodeCache() {
   }
 }
 
+// ── Location normalization ──────────────────────────────────────────────────
+// Different senders format the same city inconsistently (e.g. "BALTIMORE,MD",
+// "Baltimore (MD)", "Baltimore, Maryland"), which otherwise creates duplicate
+// entries in location filters/dropdowns. Normalize to a canonical "City, ST"
+// form via an LLM call, cached so repeat variants are free after the first hit.
+const locationNormalizeCache = new Map(); // rawLower -> canonical "City, ST"
+const LOCATION_CHUNK_SIZE = 40;
+
+async function normalizeLocationsBatch(rawLocations) {
+  if (!process.env.OPENAI_API_KEY) return;
+
+  const uncached = [...new Set(rawLocations.map(s => (s || '').trim()).filter(Boolean))]
+    .filter(loc => !locationNormalizeCache.has(loc.toLowerCase()));
+  if (uncached.length === 0) return;
+
+  for (let i = 0; i < uncached.length; i += LOCATION_CHUNK_SIZE) {
+    const chunk = uncached.slice(i, i + LOCATION_CHUNK_SIZE);
+
+    try {
+      const response = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [
+          {
+            role: 'system',
+            content:
+              'You normalize US city/state location strings for a shipping container inventory system. ' +
+              'For each input string, return its canonical form as "City, ST" (title-case city name, ' +
+              '2-letter uppercase USPS state code). Treat formatting differences as the same place: ' +
+              '"BALTIMORE,MD", "Baltimore (MD)", "Baltimore, Maryland", and "baltimore, md" must all map ' +
+              'to "Baltimore, MD". If a string has no discernible city/state (or is not a US location), ' +
+              'return it trimmed with sensible title-casing instead of guessing. ' +
+              'Return a JSON object mapping each EXACT input string (as given) to its normalized form.',
+          },
+          { role: 'user', content: chunk.join('\n') },
+        ],
+        temperature: 0,
+        max_tokens: 2000,
+        response_format: { type: 'json_object' },
+      });
+
+      const content = response.choices[0].message.content;
+      const raw = extractJson(content);
+      if (raw === null) {
+        console.warn(`[normalizeLocationsBatch] failed to parse JSON for chunk of ${chunk.length} locations (finish_reason: ${response.choices[0].finish_reason}); leaving them unnormalized`);
+        continue;
+      }
+
+      for (const [k, v] of Object.entries(raw)) {
+        if (typeof v === 'string' && v.trim()) {
+          locationNormalizeCache.set(k.toLowerCase(), v.trim());
+        }
+      }
+    } catch (err) {
+      console.error('[normalizeLocationsBatch] request failed, leaving chunk unnormalized:', err.message);
+    }
+  }
+}
+
+// Falls back to the original (trimmed) string if normalization is unavailable or failed for it.
+function getNormalizedLocation(raw) {
+  const trimmed = (raw || '').trim();
+  if (!trimmed) return trimmed;
+  return locationNormalizeCache.get(trimmed.toLowerCase()) || trimmed;
+}
+
 async function getDrivingDistances(targetCoords, destCoordsMap) {
   // destCoordsMap: { 'city key': [lat, lon] }
   const entries = Object.entries(destCoordsMap);
@@ -974,7 +1039,7 @@ async function commitCSV(csvText) {
       }
     }
 
-    const inserted = [];
+    const parsedRecords = [];
     for (let r = 1; r < rows.length; r++) {
       const cols = rows[r];
       if (cols.length === 1 && cols[0].trim() === '') continue; // skip empty
@@ -1010,9 +1075,20 @@ async function commitCSV(csvText) {
         }
       }
 
-
       // Skip rows without vendor or location
       if (!record.vendor || !record.location) continue;
+
+      parsedRecords.push(record);
+    }
+
+    // Normalize location strings as a batch so inconsistent formatting from
+    // different senders (e.g. "BALTIMORE,MD", "Baltimore (MD)") collapses to
+    // one canonical form instead of creating duplicate location entries.
+    await normalizeLocationsBatch(parsedRecords.map(r => r.location));
+
+    const inserted = [];
+    for (const record of parsedRecords) {
+      record.location = getNormalizedLocation(record.location);
 
       // Insert into DB
       await runStatement(

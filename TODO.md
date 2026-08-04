@@ -12,8 +12,6 @@ Tracks open action items for the inventory dashboard. Check items off as they're
 - [ ] Add authentication to the API endpoints — `/api/containers` (POST/PUT/DELETE), `/api/ai/query`, and `/email/inbound` are all currently open with no auth, so anyone who finds the URL can add/edit/delete inventory or rack up OpenAI usage
 - [ ] Add shared-secret/signature verification to `/email/inbound` so only requests actually from Make are processed — right now anyone who knows the endpoint URL can POST a CSV and have it processed as if it came from Make, including wiping a non-protected sender's data
 - [ ] Add pagination/limit to `GET /api/containers` — currently returns the entire table on every dashboard load with no limit, which won't scale as the table grows
-- [ ] Normalize location names on import — inconsistent formatting from different senders creates duplicate entries for the same city in filters/dropdowns (e.g. "Baltimore (MD)", "Baltimore, MD", "BALTIMORE, MD", "BALTIMORE,MD" all show up separately instead of collapsing into one)
-
 ## In Progress
 
 - [ ]
@@ -24,3 +22,4 @@ Tracks open action items for the inventory dashboard. Check items off as they're
 - [x] Write a script to delete entries based on criteria (location, vendor, etc.) — `scripts/delete-by-vendor.js`, run via `npm run delete-by-vendor -- "value" [--field=vendor|location|size|type|container_condition|color|sender] [--contains] [--yes]`
 - [x] Store `price` as a numeric column instead of `TEXT` — schema updated to `NUMERIC(12,2)`, added `scripts/migrate-price-numeric.js` for existing DBs, normalized on insert/update/CSV import, and reformatted as `$1,800` in the dashboard table, AI query responses, and the edit modal
 - [x] Improve inventory table UX — added Excel-style per-column filter dropdowns (checkbox value selection with search) and Sort A to Z / Z to A on every column, plus a "Clear Filters & Sort" button (`InventoryDashboard.jsx`)
+- [x] Normalize location names on import — `commitCSV` now batch-normalizes all locations in an incoming CSV to canonical "City, ST" form via an LLM call before insert (`normalizeLocationsBatch`/`getNormalizedLocation` in server.js), and `scripts/normalize-locations.js` (`npm run normalize-locations`) cleans up already-imported duplicates like the multiple Baltimore variants
