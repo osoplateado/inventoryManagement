@@ -132,7 +132,11 @@ function App() {
 
   function openEditModal(record) {
     setEditingId(record.id);
-    setFormState({ ...record });
+    const priceNum = Number(record.price);
+    const price = record.price === null || record.price === undefined || Number.isNaN(priceNum)
+      ? ''
+      : `$${priceNum.toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
+    setFormState({ ...record, price });
     setModalOpen(true);
   }
 

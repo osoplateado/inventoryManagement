@@ -783,6 +783,145 @@ textarea {
   text-align: center;
 }
 
+/* Excel-style column filter dropdowns */
+.th-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.filter-toggle {
+  flex-shrink: 0;
+  border: none;
+  background: rgba(148, 163, 184, 0.15);
+  color: rgba(226, 232, 240, 0.85);
+  border-radius: 0.35rem;
+  width: 1.4rem;
+  height: 1.4rem;
+  line-height: 1;
+  font-size: 0.75rem;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.filter-toggle:hover {
+  background: rgba(148, 163, 184, 0.3);
+}
+
+.filter-toggle.active {
+  background: #7c3aed;
+  color: #fff;
+}
+
+.column-filter-menu {
+  position: fixed;
+  z-index: 200;
+  width: 260px;
+  background: #0f172a;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  border-radius: 0.6rem;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  padding: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.filter-menu-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 0.5rem 0.6rem;
+  border: none;
+  background: transparent;
+  color: #e2e8f0;
+  border-radius: 0.4rem;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.filter-menu-item:hover {
+  background: rgba(148, 163, 184, 0.15);
+}
+
+.filter-menu-divider {
+  height: 1px;
+  background: rgba(148, 163, 184, 0.2);
+  margin: 0.25rem 0;
+}
+
+.filter-search {
+  width: 100%;
+  padding: 0.5rem 0.6rem;
+  border-radius: 0.4rem;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  background: rgba(15, 23, 42, 0.9);
+  color: #e2e8f0;
+}
+
+.filter-options {
+  max-height: 220px;
+  overflow-y: auto;
+  border: 1px solid rgba(148, 163, 184, 0.15);
+  border-radius: 0.4rem;
+  padding: 0.35rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.filter-option {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0.3rem;
+  border-radius: 0.3rem;
+  font-size: 0.88rem;
+  cursor: pointer;
+}
+
+.filter-option:hover {
+  background: rgba(148, 163, 184, 0.12);
+}
+
+.filter-option input {
+  flex-shrink: 0;
+}
+
+.filter-option span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.filter-option-all {
+  border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+  margin-bottom: 0.15rem;
+  padding-bottom: 0.4rem;
+}
+
+.filter-empty {
+  margin: 0.25rem 0;
+  padding: 0.25rem 0.3rem;
+  color: rgba(226, 232, 240, 0.6);
+  font-size: 0.85rem;
+}
+
+.filter-menu-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
+
+.filter-menu-actions .button.small {
+  padding: 0.45rem 0.9rem;
+  font-size: 0.85rem;
+}
+
 .hint {
   margin: 0.75rem 0 0;
   color: rgba(148, 163, 184, 0.95);

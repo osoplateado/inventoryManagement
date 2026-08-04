@@ -103,6 +103,24 @@ npm run import-sql -- ./your-dump-file.sql
 
 That script connects to your PostgreSQL database and executes the dump statements.
 
+## Deleting entries by criteria
+
+`scripts/delete-by-vendor.js` deletes rows matching a value in a chosen column (`vendor`, `location`, `size`, `type`, `container_condition`, `color`, or `sender`). It loads `.env` automatically, previews the matching rows, and asks for confirmation before deleting.
+
+```bash
+# Exact match on vendor (default field)
+npm run delete-by-vendor -- "Vendor Name"
+
+# Exact match on a different field
+npm run delete-by-vendor -- "Denver" --field=location
+
+# Partial, case-insensitive match
+npm run delete-by-vendor -- "denver" --field=location --contains
+
+# Skip the confirmation prompt
+npm run delete-by-vendor -- "Vendor Name" --yes
+```
+
 ## Verify the imported schema
 
 After importing, verify the table and row count with a PostgreSQL client, for example:

@@ -11,7 +11,8 @@
     "start": "node server.js",
     "dev:server": "nodemon server.js",
     "dev:all": "concurrently \"npm run dev\" \"npm run dev:server\"",
-    "import-sql": "node import-sql.js"
+    "import-sql": "node import-sql.js",
+    "delete-by-vendor": "node scripts/delete-by-vendor.js"
   },
   "dependencies": {
     "express": "^4.18.2",

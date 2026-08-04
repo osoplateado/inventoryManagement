@@ -5,6 +5,27 @@ const { Pool } = require('pg');
 const { randomUUID } = require('crypto');
 const { OpenAI } = require('openai');
 
+// Load local dev env vars from .env (no-op in production, where env vars are
+// set through the hosting platform instead). Never overwrites vars already
+// set in the environment.
+function loadEnvFile(filePath) {
+  if (!fs.existsSync(filePath)) return;
+  const lines = fs.readFileSync(filePath, 'utf8').split('\n');
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const eq = trimmed.indexOf('=');
+    if (eq === -1) continue;
+    const key = trimmed.slice(0, eq).trim();
+    let value = trimmed.slice(eq + 1).trim();
+    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+      value = value.slice(1, -1);
+    }
+    if (process.env[key] === undefined) process.env[key] = value;
+  }
+}
+loadEnvFile(path.join(__dirname, '.env'));
+
 const app = express();
 let db;
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -79,6 +100,24 @@ function cleanThousandSeparatorsInDollarAmounts(text) {
   return text.replace(/\$(\d{1,3}(?:,\d{3})+(?:\.\d+)?)/g, (_m, g1) => '$' + g1.replace(/,/g, ''));
 }
 
+// Strip currency formatting ($, commas, spaces) and coerce to a number for the
+// NUMERIC price column. Returns null for empty/unparseable input.
+function normalizePrice(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const cleaned = String(value).replace(/[^0-9.-]/g, '');
+  if (cleaned === '' || cleaned === '-') return null;
+  const num = Number(cleaned);
+  return Number.isNaN(num) ? null : num;
+}
+
+// Format a numeric price (or the numeric-string pg returns) as "$1,800".
+function formatPrice(value) {
+  const num = Number(value);
+  return value === null || value === undefined || value === '' || Number.isNaN(num)
+    ? 'N/A'
+    : `$${num.toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
+}
+
 
 
 async function initializePostgres() {
@@ -127,7 +166,7 @@ async function initializeDatabase() {
       container_condition TEXT,
       color TEXT,
       quantity INTEGER,
-      price TEXT,
+      price NUMERIC(12,2),
       delivery TEXT,
       date TEXT,
       notes TEXT,
@@ -190,6 +229,7 @@ app.post('/api/containers', async (req, res) => {
   } = req.body;
 
   const id = randomUUID();
+  const normalizedPrice = normalizePrice(price);
 
   try {
     await runStatement(
@@ -206,7 +246,7 @@ app.post('/api/containers', async (req, res) => {
         container_condition,
         color,
         Number(quantity),
-        price,
+        normalizedPrice,
         delivery,
         date,
         notes,
@@ -223,7 +263,7 @@ app.post('/api/containers', async (req, res) => {
       container_condition,
       color,
       quantity: Number(quantity),
-      price,
+      price: normalizedPrice,
       delivery,
       date,
       notes,
@@ -251,6 +291,8 @@ app.put('/api/containers/:id', async (req, res) => {
     sender,
   } = req.body;
 
+  const normalizedPrice = normalizePrice(price);
+
   try {
     const result = await runStatement(
       `UPDATE containers SET
@@ -275,7 +317,7 @@ app.put('/api/containers/:id', async (req, res) => {
         container_condition,
         color,
         Number(quantity),
-        price,
+        normalizedPrice,
         delivery,
         date,
         notes,
@@ -296,7 +338,7 @@ app.put('/api/containers/:id', async (req, res) => {
       container_condition,
       color,
       quantity: Number(quantity),
-      price,
+      price: normalizedPrice,
       delivery,
       date,
       notes,
@@ -566,7 +608,7 @@ async function summarizeContainerResults(query, rows, history) {
   } else {
     const displayRows = isPriceQuery ? rows.slice(0, 15) : rows;
     inventoryText = displayRows.map(r =>
-      `Vendor: ${r.vendor}, Location: ${r.location}, Size: ${r.size}ft, Type: ${r.type}, Condition: ${r.container_condition}, Color: ${r.color}, Qty: ${r.quantity}, Price: ${r.price}, Delivery: ${r.delivery || ''}${r.sender ? ', Contact: ' + r.sender : ''}${r.notes ? ', Notes: ' + r.notes : ''}`
+      `Vendor: ${r.vendor}, Location: ${r.location}, Size: ${r.size}ft, Type: ${r.type}, Condition: ${r.container_condition}, Color: ${r.color}, Qty: ${r.quantity}, Price: ${formatPrice(r.price)}, Delivery: ${r.delivery || ''}${r.sender ? ', Contact: ' + r.sender : ''}${r.notes ? ', Notes: ' + r.notes : ''}`
     ).join('\n');
   }
 
@@ -577,7 +619,7 @@ async function summarizeContainerResults(query, rows, history) {
     if (rows.length === 0) return 'No containers matched that criteria.';
     const sections = Object.entries(byLocation).map(([key, d]) => {
       const lines = d.rows.map(r =>
-        `  - ${r.vendor}: ${r.size} ${r.type}, ${r.container_condition}, ${r.color}, Qty: ${r.quantity}, Price: ${r.price}${r.delivery ? ', Delivery: ' + r.delivery : ''}${r.sender ? ', Contact: ' + r.sender : ''}${r.notes ? ', Notes: ' + r.notes : ''}`
+        `  - ${r.vendor}: ${r.size} ${r.type}, ${r.container_condition}, ${r.color}, Qty: ${r.quantity}, Price: ${formatPrice(r.price)}${r.delivery ? ', Delivery: ' + r.delivery : ''}${r.sender ? ', Contact: ' + r.sender : ''}${r.notes ? ', Notes: ' + r.notes : ''}`
       ).join('\n');
       return `**${displayName[key]}** (${d.qty} containers):\n${lines}`;
     });
@@ -610,29 +652,44 @@ ${inventoryText}`;
 const geocodeCache = new Map();
 let geocodeCacheReady = false;
 
+const GEOCODE_CHUNK_SIZE = 40;
+
 async function geocodeBatch(locations) {
   const uncached = [...new Set(locations.map(s => s.trim()).filter(Boolean))]
     .filter(loc => !geocodeCache.has(loc.toLowerCase()));
   if (uncached.length === 0) return;
 
-  const response = await openai.chat.completions.create({
-    model: 'gpt-4o-mini',
-    messages: [
-      {
-        role: 'system',
-        content: 'You are a geocoding service. Return a JSON object where each key is the EXACT location string provided and the value is [latitude, longitude]. Include ALL locations. Use city-center coordinates.',
-      },
-      { role: 'user', content: uncached.join('\n') },
-    ],
-    temperature: 0,
-    max_tokens: 2000,
-    response_format: { type: 'json_object' },
-  });
+  // Chunk the request — a single call covering hundreds of locations can produce
+  // a JSON response long enough to get cut off by max_tokens, which silently
+  // yields zero cached entries with no error.
+  for (let i = 0; i < uncached.length; i += GEOCODE_CHUNK_SIZE) {
+    const chunk = uncached.slice(i, i + GEOCODE_CHUNK_SIZE);
 
-  const raw = extractJson(response.choices[0].message.content) ?? {};
-  for (const [k, v] of Object.entries(raw)) {
-    if (Array.isArray(v) && v.length === 2 && typeof v[0] === 'number') {
-      geocodeCache.set(k.toLowerCase(), v);
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        {
+          role: 'system',
+          content: 'You are a geocoding service. Return a JSON object where each key is the EXACT location string provided and the value is [latitude, longitude]. Include ALL locations. Use city-center coordinates.',
+        },
+        { role: 'user', content: chunk.join('\n') },
+      ],
+      temperature: 0,
+      max_tokens: 2000,
+      response_format: { type: 'json_object' },
+    });
+
+    const content = response.choices[0].message.content;
+    const raw = extractJson(content);
+    if (raw === null) {
+      console.warn(`[geocodeBatch] failed to parse JSON for chunk of ${chunk.length} locations (finish_reason: ${response.choices[0].finish_reason}); skipping this chunk`);
+      continue;
+    }
+
+    for (const [k, v] of Object.entries(raw)) {
+      if (Array.isArray(v) && v.length === 2 && typeof v[0] === 'number') {
+        geocodeCache.set(k.toLowerCase(), v);
+      }
     }
   }
 }
@@ -656,6 +713,11 @@ async function warmGeocodeCache() {
     await geocodeBatch(locations);
     geocodeCacheReady = true;
     console.log(`Geocode cache ready: ${geocodeCache.size} entries`);
+
+    const missing = locations.filter(loc => !geocodeCache.has(loc.trim().toLowerCase()));
+    if (missing.length > 0) {
+      console.warn(`Geocode cache missing ${missing.length} location(s), not resolvable by geocoding: ${JSON.stringify(missing)}`);
+    }
   } catch (err) {
     console.error('Geocode cache warm-up failed:', err.message);
   }
@@ -788,7 +850,9 @@ app.post('/api/ai/query', async (req, res) => {
         console.log('rows after distance filter:', rows.length, [...new Set(rows.map(r => r.location))]);
       }
 
-      // Sort by numeric price in JS — DB price column is text like "$1500"
+      // price is a NUMERIC column so SQL already sorts it correctly; this JS
+      // re-sort just re-applies it after filterByDistance, which runs after
+      // the SQL ORDER BY and can leave rows in a different order.
       if (filters.sort === 'price_asc' || filters.sort === 'price_desc') {
         const parsePrice = p => parseFloat(String(p || '').replace(/[^0-9.]/g, '')) || Infinity;
         rows = [...rows].sort((a, b) =>
@@ -836,8 +900,13 @@ app.post('/email/inbound', async (req, res) => {
 
     // Collect useful pieces from common providers
     const responseBody = req.body;
-    commitCSV(responseBody);
-    
+    console.log('[email/inbound] content-type:', req.headers['content-type']);
+    console.log('[email/inbound] body type:', typeof responseBody, 'isBuffer:', Buffer.isBuffer(responseBody));
+    console.log('[email/inbound] body preview:', typeof responseBody === 'string'
+      ? `${responseBody.length} chars: ${responseBody.slice(0, 300)}`
+      : JSON.stringify(responseBody).slice(0, 300));
+    commitCSV(responseBody).catch(err => console.error('[email/inbound] commitCSV failed:', err));
+
     const receivedAt = new Date();
 
     res.status(200).json({ ok: true});
@@ -850,14 +919,21 @@ app.post('/email/inbound', async (req, res) => {
 async function commitCSV(csvText) {
 
     const raw = csvText;
-    if (!raw || raw.trim().length === 0) return;
+    if (!raw || raw.trim().length === 0) {
+      console.log('[commitCSV] empty/missing body, nothing to process');
+      return;
+    }
 
     // Clean common thousand separators in dollar amounts so CSV columns align
     const cleaned = cleanThousandSeparatorsInDollarAmounts(raw);
 
     const rows = parseCsv(cleaned);
 
-    if (!rows || rows.length < 2) return ;
+    if (!rows || rows.length < 2) {
+      console.log(`[commitCSV] parsed ${rows ? rows.length : 0} row(s), need at least a header + 1 data row — skipping`);
+      return;
+    }
+    console.log(`[commitCSV] parsed ${rows.length} rows, header: ${JSON.stringify(rows[0])}`);
 
     const header = rows[0].map(h => (h || '').toString().trim());
 
@@ -928,8 +1004,7 @@ async function commitCSV(csvText) {
           const n = parseInt(val.replace(/[^0-9\-]/g, ''), 10);
           record.quantity = Number.isNaN(n) ? null : n;
         } else if (key === 'price') {
-          // normalize price like $1800
-          record.price = val.replace(/\s+/g, '');
+          record.price = normalizePrice(val);
         } else {
           record[key] = val;
         }
