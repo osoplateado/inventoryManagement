@@ -220,10 +220,28 @@ app.use((err, req, res, next) => {
 const staticPath = path.join(__dirname, 'dist');
 app.use(express.static(staticPath));
 
+// Bounded so a single request can never pull the whole table in one shot as
+// it grows. The dashboard's column filters/sort still need the full dataset
+// client-side, so it pages through this transparently (see loadRecords in
+// App.jsx) rather than the UI itself becoming paginated.
+const DEFAULT_CONTAINERS_LIMIT = 500;
+const MAX_CONTAINERS_LIMIT = 1000;
+
 app.get('/api/containers', async (req, res) => {
   try {
-    const rows = await getRows('SELECT * FROM containers ORDER BY date DESC, vendor ASC');
-    res.json(rows);
+    let limit = parseInt(req.query.limit, 10);
+    if (!Number.isFinite(limit) || limit <= 0) limit = DEFAULT_CONTAINERS_LIMIT;
+    limit = Math.min(limit, MAX_CONTAINERS_LIMIT);
+
+    let offset = parseInt(req.query.offset, 10);
+    if (!Number.isFinite(offset) || offset < 0) offset = 0;
+
+    const [rows, countRows] = await Promise.all([
+      getRows('SELECT * FROM containers ORDER BY date DESC, vendor ASC LIMIT $1 OFFSET $2', [limit, offset]),
+      getRows('SELECT COUNT(*)::int AS count FROM containers'),
+    ]);
+
+    res.json({ rows, total: countRows[0].count, limit, offset });
   } catch (err) {
     handleDbError(res, err);
   }

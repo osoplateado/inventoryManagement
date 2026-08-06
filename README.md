@@ -4,9 +4,9 @@ A simple shipping container inventory dashboard backed by Node and PostgreSQL.
 
 ## Files
 
-- `index.html` — main dashboard and modal form
+- `index.html` — Vite entry point
 - `styles.css` — page layout and styling
-- `script.js` — frontend logic with API calls
+- `src/` — React frontend (components, App.jsx)
 - `server.js` — Node Express server and PostgreSQL integration
 - `package.json` — dependencies and start script
 - `.gitignore` — ignores `node_modules`
