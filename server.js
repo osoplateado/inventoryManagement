@@ -191,6 +191,17 @@ async function initializeDatabase() {
     CREATE INDEX IF NOT EXISTS idx_chat_messages_session_id
     ON chat_messages (session_id, created_at)
   `);
+
+  // Sessions the user flagged as having had a problem, set from the live
+  // chat (see the "Flag issue" button in InventoryAgent.jsx). Presence of a
+  // row means the session is flagged; the chat history page renders those
+  // sessions with a red border.
+  await runStatement(`
+    CREATE TABLE IF NOT EXISTS chat_flags (
+      session_id TEXT PRIMARY KEY,
+      flagged_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+  `);
 }
 
 // Capture raw body for fallback and debugging
@@ -943,6 +954,8 @@ app.get('/api/chat', async (req, res) => {
     const rows = await getRows(
       'SELECT session_id, role, text, created_at FROM chat_messages ORDER BY created_at ASC'
     );
+    const flagRows = await getRows('SELECT session_id FROM chat_flags');
+    const flaggedSessions = new Set(flagRows.map((r) => r.session_id));
 
     const bySession = new Map();
     for (const row of rows) {
@@ -955,6 +968,7 @@ app.get('/api/chat', async (req, res) => {
         sessionId,
         startedAt: messages[0].createdAt,
         lastMessageAt: messages[messages.length - 1].createdAt,
+        flagged: flaggedSessions.has(sessionId),
         messages,
       }))
       .sort((a, b) => new Date(b.lastMessageAt) - new Date(a.lastMessageAt));
@@ -971,7 +985,11 @@ app.get('/api/chat/:sessionId', async (req, res) => {
       'SELECT role, text FROM chat_messages WHERE session_id = $1 ORDER BY created_at ASC',
       [req.params.sessionId]
     );
-    res.json({ messages: rows });
+    const flagRows = await getRows(
+      'SELECT 1 FROM chat_flags WHERE session_id = $1',
+      [req.params.sessionId]
+    );
+    res.json({ messages: rows, flagged: flagRows.length > 0 });
   } catch (err) {
     handleDbError(res, err);
   }
@@ -980,6 +998,29 @@ app.get('/api/chat/:sessionId', async (req, res) => {
 app.delete('/api/chat/:sessionId', async (req, res) => {
   try {
     await runStatement('DELETE FROM chat_messages WHERE session_id = $1', [req.params.sessionId]);
+    await runStatement('DELETE FROM chat_flags WHERE session_id = $1', [req.params.sessionId]);
+    res.status(204).end();
+  } catch (err) {
+    handleDbError(res, err);
+  }
+});
+
+// Mark a session as having had an issue, set live from the chat panel.
+app.post('/api/chat/:sessionId/flag', async (req, res) => {
+  try {
+    await runStatement(
+      'INSERT INTO chat_flags (session_id) VALUES ($1) ON CONFLICT (session_id) DO NOTHING',
+      [req.params.sessionId]
+    );
+    res.status(204).end();
+  } catch (err) {
+    handleDbError(res, err);
+  }
+});
+
+app.delete('/api/chat/:sessionId/flag', async (req, res) => {
+  try {
+    await runStatement('DELETE FROM chat_flags WHERE session_id = $1', [req.params.sessionId]);
     res.status(204).end();
   } catch (err) {
     handleDbError(res, err);

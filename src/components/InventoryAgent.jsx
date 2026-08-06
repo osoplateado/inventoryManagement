@@ -20,6 +20,8 @@ function InventoryAgent() {
   const [loading, setLoading] = useState(false);
   const [messages, setMessages] = useState([]);
   const [geocodeReady, setGeocodeReady] = useState(false);
+  const [flagged, setFlagged] = useState(false);
+  const [flagging, setFlagging] = useState(false);
   const sessionIdRef = useRef(null);
   if (sessionIdRef.current === null) sessionIdRef.current = getSessionId();
   const messagesRef = useRef(null);
@@ -36,6 +38,7 @@ function InventoryAgent() {
         const resp = await fetch(`/api/chat/${sessionIdRef.current}`);
         const data = await resp.json();
         if (Array.isArray(data.messages)) setMessages(data.messages);
+        setFlagged(Boolean(data.flagged));
       } catch {
         // No prior history, or the fetch failed — just start with an empty chat.
       }
@@ -93,18 +96,43 @@ function InventoryAgent() {
     // in the DB so it stays visible on the /inventory/chats history page
     // instead of being deleted.
     setMessages([]);
+    setFlagged(false);
     sessionIdRef.current = crypto.randomUUID();
     localStorage.setItem(SESSION_ID_KEY, sessionIdRef.current);
   }
 
+  async function handleFlag() {
+    if (flagged || flagging) return;
+    setFlagging(true);
+    try {
+      const resp = await fetch(`/api/chat/${sessionIdRef.current}/flag`, { method: 'POST' });
+      if (resp.ok) setFlagged(true);
+    } catch {
+      // Leave flagged as-is; the user can try again.
+    } finally {
+      setFlagging(false);
+    }
+  }
+
   return (
-    <section className="panel ai-panel">
+    <section className={`panel ai-panel${flagged ? ' ai-panel-flagged' : ''}`}>
       <div className="ai-panel-header">
         <h3>Ask the Inventory (AI)</h3>
         {messages.length > 0 && (
-          <button type="button" className="button" onClick={handleNewChat} disabled={loading}>
-            New chat
-          </button>
+          <div className="ai-panel-actions">
+            <button
+              type="button"
+              className={`button${flagged ? ' flagged' : ''}`}
+              onClick={handleFlag}
+              disabled={loading || flagging || flagged}
+              title="Flag this chat as having had a problem"
+            >
+              {flagged ? '🚩 Flagged' : '🚩 Flag issue'}
+            </button>
+            <button type="button" className="button secondary" onClick={handleNewChat} disabled={loading}>
+              New chat
+            </button>
+          </div>
         )}
       </div>
 

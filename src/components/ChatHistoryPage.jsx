@@ -52,12 +52,24 @@ function ChatHistoryPage() {
 
       <div className="chat-history-list">
         {sessions.map((session) => (
-          <div key={session.sessionId} className="panel ai-panel chat-history-session">
+          <div
+            key={session.sessionId}
+            className={`panel ai-panel chat-history-session${
+              session.flagged ? ' chat-history-session-flagged' : ''
+            }`}
+          >
             <div className="ai-panel-header">
               <h3>{formatTimestamp(session.startedAt)}</h3>
-              <span className="chat-history-session-id" title={session.sessionId}>
-                {session.sessionId.slice(0, 8)}
-              </span>
+              <div className="chat-history-session-meta">
+                {session.flagged && (
+                  <span className="chat-history-flag-badge" title="Flagged as having had a problem">
+                    🚩 Flagged
+                  </span>
+                )}
+                <span className="chat-history-session-id" title={session.sessionId}>
+                  {session.sessionId.slice(0, 8)}
+                </span>
+              </div>
             </div>
             <div className="ai-chat">
               <div className="messages chat-history-messages">

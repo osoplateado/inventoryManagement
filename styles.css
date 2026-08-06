@@ -590,6 +590,25 @@ textarea {
   margin: 0 0 1rem;
 }
 
+.ai-panel-actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.ai-panel-actions .button.flagged {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.4);
+  color: #fca5a5;
+  cursor: default;
+}
+
+/* Live panel border once the current session has been flagged */
+.ai-panel-flagged {
+  border: 2px solid #ef4444;
+  border-radius: 0.9rem;
+}
+
 .ai-chat {
   display: flex;
   flex-direction: column;
@@ -682,6 +701,26 @@ textarea {
 
 .chat-history-session {
   margin-top: 0;
+}
+
+.chat-history-session-flagged {
+  border: 2px solid #ef4444;
+  box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.25);
+}
+
+.chat-history-session-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.chat-history-flag-badge {
+  font-size: 0.8rem;
+  color: #fca5a5;
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  border-radius: 999px;
+  padding: 0.2rem 0.6rem;
 }
 
 .chat-history-session-id {
