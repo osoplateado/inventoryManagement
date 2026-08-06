@@ -28,7 +28,16 @@ loadEnvFile(path.join(__dirname, '.env'));
 
 const app = express();
 let db;
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+let openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+// Test-only seam: lets integration tests swap in a fake OpenAI client so
+// tests never make real (billed, non-deterministic, network-dependent)
+// calls to the OpenAI API. Mocking the `openai` package itself via the test
+// runner's module system doesn't reliably intercept this file's own
+// `require('openai')` — plain reassignment is simpler and guaranteed to work.
+function __setOpenAIClientForTests(client) {
+  openai = client;
+}
 
 function handleDbError(res, err) {
   console.error(err);
@@ -43,15 +52,6 @@ async function getRows(sql, params = []) {
 async function runStatement(sql, params = []) {
   const result = await db.query(sql, params);
   return result;
-}
-
-function getEmailText(body) {
-  if (!body) return '';
-  if (typeof body === 'string') return body;
-  if (typeof body === 'object') {
-    return body.text || body.body || body.html || JSON.stringify(body);
-  }
-  return String(body);
 }
 
 // Simple CSV parser that respects quoted fields
@@ -220,10 +220,28 @@ app.use((err, req, res, next) => {
 const staticPath = path.join(__dirname, 'dist');
 app.use(express.static(staticPath));
 
+// Bounded so a single request can never pull the whole table in one shot as
+// it grows. The dashboard's column filters/sort still need the full dataset
+// client-side, so it pages through this transparently (see loadRecords in
+// App.jsx) rather than the UI itself becoming paginated.
+const DEFAULT_CONTAINERS_LIMIT = 500;
+const MAX_CONTAINERS_LIMIT = 1000;
+
 app.get('/api/containers', async (req, res) => {
   try {
-    const rows = await getRows('SELECT * FROM containers ORDER BY date DESC, vendor ASC');
-    res.json(rows);
+    let limit = parseInt(req.query.limit, 10);
+    if (!Number.isFinite(limit) || limit <= 0) limit = DEFAULT_CONTAINERS_LIMIT;
+    limit = Math.min(limit, MAX_CONTAINERS_LIMIT);
+
+    let offset = parseInt(req.query.offset, 10);
+    if (!Number.isFinite(offset) || offset < 0) offset = 0;
+
+    const [rows, countRows] = await Promise.all([
+      getRows('SELECT * FROM containers ORDER BY date DESC, vendor ASC LIMIT $1 OFFSET $2', [limit, offset]),
+      getRows('SELECT COUNT(*)::int AS count FROM containers'),
+    ]);
+
+    res.json({ rows, total: countRows[0].count, limit, offset });
   } catch (err) {
     handleDbError(res, err);
   }
@@ -1061,10 +1079,6 @@ app.get('*', (req, res) => {
 // Inbound email webhook for inventory@robertgraman.com
 app.post('/email/inbound', async (req, res) => {
   try {
-    // Ensure emails directory exists
-    const emailsDir = path.join(__dirname, 'emails');
-    fs.mkdirSync(emailsDir, { recursive: true });
-
     // Collect useful pieces from common providers
     const responseBody = req.body;
     console.log('[email/inbound] content-type:', req.headers['content-type']);
@@ -1072,23 +1086,30 @@ app.post('/email/inbound', async (req, res) => {
     console.log('[email/inbound] body preview:', typeof responseBody === 'string'
       ? `${responseBody.length} chars: ${responseBody.slice(0, 300)}`
       : JSON.stringify(responseBody).slice(0, 300));
-    commitCSV(responseBody).catch(err => console.error('[email/inbound] commitCSV failed:', err));
+    const result = await commitCSV(responseBody);
 
-    const receivedAt = new Date();
+    if (!result.ok) {
+      console.warn(`[email/inbound] rejecting: ${result.reason} — ${result.message}`);
+      return res.status(422).json({ ok: false, error: result.message });
+    }
 
-    res.status(200).json({ ok: true});
+    res.status(200).json({ ok: true, inserted: result.insertedCount, skipped: result.skippedCount });
   } catch (err) {
     console.error('Failed to handle inbound email:', err);
     res.status(500).json({ error: 'failed to process email' });
   }
 });
 
+// Returns { ok: true, insertedCount, skippedCount } on success, or
+// { ok: false, reason, message } when the body isn't usable CSV — the caller
+// (the /email/inbound webhook) uses `ok` to decide the response status code,
+// so Make knows to retry instead of treating a silently-skipped import as success.
 async function commitCSV(csvText) {
 
     const raw = csvText;
     if (!raw || raw.trim().length === 0) {
       console.log('[commitCSV] empty/missing body, nothing to process');
-      return;
+      return { ok: false, reason: 'empty_body', message: 'Request body was empty; expected CSV text.' };
     }
 
     // Clean common thousand separators in dollar amounts so CSV columns align
@@ -1097,8 +1118,9 @@ async function commitCSV(csvText) {
     const rows = parseCsv(cleaned);
 
     if (!rows || rows.length < 2) {
-      console.log(`[commitCSV] parsed ${rows ? rows.length : 0} row(s), need at least a header + 1 data row — skipping`);
-      return;
+      const message = `CSV must include a header row and at least one data row (got ${rows ? rows.length : 0} row(s))`;
+      console.log(`[commitCSV] ${message} — skipping`);
+      return { ok: false, reason: 'insufficient_rows', message };
     }
     console.log(`[commitCSV] parsed ${rows.length} rows, header: ${JSON.stringify(rows[0])}`);
 
@@ -1120,6 +1142,12 @@ async function commitCSV(csvText) {
     };
 
     const mappedHeaders = header.map(h => mapping[h] || null);
+
+    if (mappedHeaders.every(h => h === null)) {
+      const message = `Header row didn't match any expected CSV columns (got: ${JSON.stringify(header)})`;
+      console.log(`[commitCSV] ${message} — skipping`);
+      return { ok: false, reason: 'unrecognized_columns', message };
+    }
 
     // Determine sender from the first data row and delete their existing entries.
     // Some senders' data should never be wiped on import (e.g. it's manually curated).
@@ -1183,6 +1211,12 @@ async function commitCSV(csvText) {
       parsedRecords.push(record);
     }
 
+    if (parsedRecords.length === 0) {
+      const message = `No usable rows — all ${rows.length - 1} data row(s) were missing a vendor and/or location`;
+      console.log(`[commitCSV] ${message} — skipping`);
+      return { ok: false, reason: 'no_valid_records', message };
+    }
+
     // Normalize location strings as a batch so inconsistent formatting from
     // different senders (e.g. "BALTIMORE,MD", "Baltimore (MD)") collapses to
     // one canonical form instead of creating duplicate location entries.
@@ -1225,20 +1259,49 @@ async function commitCSV(csvText) {
         console.error('[commitCSV] geocoding new locations failed:', err.message)
       );
     }
+
+    return {
+      ok: true,
+      insertedCount: inserted.length,
+      skippedCount: (rows.length - 1) - parsedRecords.length,
+    };
 }
 
 const port = process.env.PORT || 3000;
 const host = '0.0.0.0';
 
-initializeDatabase()
-  .then(() => {
-    app.listen(port, host, () => {
-      console.log(`Server listening on http://${host}:${port}`);
-      console.log('Using PostgreSQL database');
+// Only boot the real server (connect to Postgres, start listening, warm the
+// geocode cache) when this file is run directly, e.g. `node server.js`.
+// Tests instead `require()` this module, call initializeDatabase() themselves
+// against a separate test database, and drive `app` through supertest
+// without ever binding a real port.
+if (require.main === module) {
+  initializeDatabase()
+    .then(() => {
+      app.listen(port, host, () => {
+        console.log(`Server listening on http://${host}:${port}`);
+        console.log('Using PostgreSQL database');
+      });
+      warmGeocodeCache();
+    })
+    .catch((err) => {
+      console.error('Database initialization failed:', err);
+      process.exit(1);
     });
-    warmGeocodeCache();
-  })
-  .catch((err) => {
-    console.error('Database initialization failed:', err);
-    process.exit(1);
-  });
+}
+
+module.exports = {
+  app,
+  initializeDatabase,
+  closeDatabase: () => db && db.end(),
+  runStatement,
+  __setOpenAIClientForTests,
+  // Pure functions, exported for unit testing.
+  parseCsv,
+  cleanThousandSeparatorsInDollarAmounts,
+  normalizePrice,
+  formatPrice,
+  extractJson,
+  buildSqlFromFilters,
+  getNormalizedLocation,
+};

@@ -107,10 +107,24 @@ function App() {
     setError('');
 
     try {
-      const response = await fetch('/api/containers');
-      if (!response.ok) throw new Error('Unable to fetch records');
-      const data = await response.json();
-      setRecords(data);
+      // GET /api/containers is paginated server-side so a single request can
+      // never pull the whole (growing) table in one shot. The dashboard's
+      // column filters/sort still work over the full dataset, so page through
+      // it here transparently rather than exposing pagination in the UI.
+      const pageSize = 1000;
+      let offset = 0;
+      let all = [];
+      let total = Infinity;
+      while (offset < total) {
+        const response = await fetch(`/api/containers?limit=${pageSize}&offset=${offset}`);
+        if (!response.ok) throw new Error('Unable to fetch records');
+        const data = await response.json();
+        all = all.concat(data.rows);
+        total = data.total;
+        offset += data.rows.length;
+        if (data.rows.length === 0) break; // safety net against an infinite loop
+      }
+      setRecords(all);
     } catch (err) {
       setError('Unable to load inventory. Is the backend running?');
     } finally {

@@ -1,0 +1,50 @@
+name: Test
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    # A throwaway Postgres for this run only — completely separate from the
+    # real Render production database. Nothing here can ever touch prod data.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: inventory_test
+          POSTGRES_PASSWORD: localtest
+          POSTGRES_DB: inventory_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      - name: Run tests
+        run: npm test
+        env:
+          DATABASE_URL_TEST: postgresql://inventory_test:localtest@localhost:5432/inventory_test
+          # Never real — every test run mocks the OpenAI client (see
+          # tests/integration/testServer.js and tests/unit); this just needs
+          # to be a non-empty string so routes that check for its presence
+          # don't 503 in tests that exercise them.
+          OPENAI_API_KEY: test-key-not-real
+
+      - name: Verify the frontend build
+        run: npm run build
