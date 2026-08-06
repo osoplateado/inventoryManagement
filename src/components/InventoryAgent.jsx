@@ -20,7 +20,6 @@ function InventoryAgent() {
   const [loading, setLoading] = useState(false);
   const [messages, setMessages] = useState([]);
   const [geocodeReady, setGeocodeReady] = useState(false);
-  const [historyLoaded, setHistoryLoaded] = useState(false);
   const sessionIdRef = useRef(null);
   if (sessionIdRef.current === null) sessionIdRef.current = getSessionId();
   const messagesRef = useRef(null);
@@ -39,8 +38,6 @@ function InventoryAgent() {
         if (Array.isArray(data.messages)) setMessages(data.messages);
       } catch {
         // No prior history, or the fetch failed — just start with an empty chat.
-      } finally {
-        setHistoryLoaded(true);
       }
     }
     loadHistory();

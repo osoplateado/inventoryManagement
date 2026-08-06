@@ -28,7 +28,16 @@ loadEnvFile(path.join(__dirname, '.env'));
 
 const app = express();
 let db;
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+let openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+// Test-only seam: lets integration tests swap in a fake OpenAI client so
+// tests never make real (billed, non-deterministic, network-dependent)
+// calls to the OpenAI API. Mocking the `openai` package itself via the test
+// runner's module system doesn't reliably intercept this file's own
+// `require('openai')` — plain reassignment is simpler and guaranteed to work.
+function __setOpenAIClientForTests(client) {
+  openai = client;
+}
 
 function handleDbError(res, err) {
   console.error(err);
@@ -43,15 +52,6 @@ async function getRows(sql, params = []) {
 async function runStatement(sql, params = []) {
   const result = await db.query(sql, params);
   return result;
-}
-
-function getEmailText(body) {
-  if (!body) return '';
-  if (typeof body === 'string') return body;
-  if (typeof body === 'object') {
-    return body.text || body.body || body.html || JSON.stringify(body);
-  }
-  return String(body);
 }
 
 // Simple CSV parser that respects quoted fields
@@ -1079,10 +1079,6 @@ app.get('*', (req, res) => {
 // Inbound email webhook for inventory@robertgraman.com
 app.post('/email/inbound', async (req, res) => {
   try {
-    // Ensure emails directory exists
-    const emailsDir = path.join(__dirname, 'emails');
-    fs.mkdirSync(emailsDir, { recursive: true });
-
     // Collect useful pieces from common providers
     const responseBody = req.body;
     console.log('[email/inbound] content-type:', req.headers['content-type']);
@@ -1274,15 +1270,38 @@ async function commitCSV(csvText) {
 const port = process.env.PORT || 3000;
 const host = '0.0.0.0';
 
-initializeDatabase()
-  .then(() => {
-    app.listen(port, host, () => {
-      console.log(`Server listening on http://${host}:${port}`);
-      console.log('Using PostgreSQL database');
+// Only boot the real server (connect to Postgres, start listening, warm the
+// geocode cache) when this file is run directly, e.g. `node server.js`.
+// Tests instead `require()` this module, call initializeDatabase() themselves
+// against a separate test database, and drive `app` through supertest
+// without ever binding a real port.
+if (require.main === module) {
+  initializeDatabase()
+    .then(() => {
+      app.listen(port, host, () => {
+        console.log(`Server listening on http://${host}:${port}`);
+        console.log('Using PostgreSQL database');
+      });
+      warmGeocodeCache();
+    })
+    .catch((err) => {
+      console.error('Database initialization failed:', err);
+      process.exit(1);
     });
-    warmGeocodeCache();
-  })
-  .catch((err) => {
-    console.error('Database initialization failed:', err);
-    process.exit(1);
-  });
+}
+
+module.exports = {
+  app,
+  initializeDatabase,
+  closeDatabase: () => db && db.end(),
+  runStatement,
+  __setOpenAIClientForTests,
+  // Pure functions, exported for unit testing.
+  parseCsv,
+  cleanThousandSeparatorsInDollarAmounts,
+  normalizePrice,
+  formatPrice,
+  extractJson,
+  buildSqlFromFilters,
+  getNormalizedLocation,
+};

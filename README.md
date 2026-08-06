@@ -31,6 +31,41 @@ npm run dev:all
 
 This runs Vite (frontend, `http://localhost:5173`) and the Node/Express API server (auto-restarts via nodemon) at the same time.
 
+## Testing
+
+Tests run against a **separate local Postgres database** — never the real Render production DB — and mock the OpenAI client, so they're free, deterministic, and safe to run repeatedly.
+
+One-time setup (installs a local Postgres server and creates a dedicated test role/database):
+
+```bash
+sudo apt update
+sudo apt install -y postgresql
+sudo service postgresql start
+sudo -u postgres psql -c "CREATE USER inventory_test WITH SUPERUSER PASSWORD 'localtest';"
+sudo -u postgres createdb -O inventory_test inventory_test
+```
+
+Note: WSL doesn't auto-start services on its own — after a reboot/new WSL session you'll need `sudo service postgresql start` again before running tests locally.
+
+Then:
+
+```bash
+npm test              # run everything once
+npm run test:watch    # watch mode
+npm run test:unit     # pure-function unit tests only (no DB needed)
+npm run test:integration  # route/DB integration tests only
+```
+
+Test layout:
+
+- `tests/unit/` — pure functions exported from `server.js` (CSV parsing, price normalization, SQL filter building, etc.) — no DB, no network.
+- `tests/integration/` — hits the real Express `app` (via `supertest`) against the local test Postgres DB, covering things like CSV import validation, container pagination/CRUD, and AI chat persistence. `tests/integration/testServer.js` boots the DB and truncates app tables between tests; every test file that needs the server imports `app` from there.
+- `tests/frontend/` — React component tests (`@testing-library/react` + jsdom) with `fetch` mocked, no backend needed.
+
+The OpenAI client is swapped for a mock in every integration test (see `server.js`'s `__setOpenAIClientForTests`, used by `tests/integration/testServer.js`) — no test ever makes a real, billed call to OpenAI.
+
+CI (`.github/workflows/test.yml`) runs the full suite on every push/PR using a throwaway Postgres service container, then verifies the frontend build.
+
 ## Features
 
 - React frontend built with Vite
