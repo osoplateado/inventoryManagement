@@ -31,7 +31,7 @@ beforeAll(async () => {
 });
 
 afterEach(async () => {
-  await runStatement('TRUNCATE containers, chat_messages');
+  await runStatement('TRUNCATE containers, chat_messages, chat_flags');
   openaiMock.chat.completions.create.mockClear();
 });
 

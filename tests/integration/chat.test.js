@@ -58,3 +58,55 @@ describe('AI chat persistence', () => {
     expect(deleted.body.messages).toHaveLength(0);
   });
 });
+
+describe('Chat session flagging', () => {
+  it('marks a session as flagged and reflects it on both read endpoints', async () => {
+    await request(app).post('/api/ai/query').send({ query: 'q1', history: [], sessionId: 'flag-me' });
+
+    const before = await request(app).get('/api/chat/flag-me');
+    expect(before.body.flagged).toBe(false);
+
+    const flag = await request(app).post('/api/chat/flag-me/flag');
+    expect(flag.status).toBe(204);
+
+    const after = await request(app).get('/api/chat/flag-me');
+    expect(after.body.flagged).toBe(true);
+
+    const all = await request(app).get('/api/chat');
+    const session = all.body.sessions.find((s) => s.sessionId === 'flag-me');
+    expect(session.flagged).toBe(true);
+  });
+
+  it('flagging twice is idempotent', async () => {
+    await request(app).post('/api/ai/query').send({ query: 'q1', history: [], sessionId: 'double-flag' });
+    await request(app).post('/api/chat/double-flag/flag');
+    const second = await request(app).post('/api/chat/double-flag/flag');
+    expect(second.status).toBe(204);
+
+    const res = await request(app).get('/api/chat/double-flag');
+    expect(res.body.flagged).toBe(true);
+  });
+
+  it('DELETE /api/chat/:sessionId/flag unflags a session', async () => {
+    await request(app).post('/api/ai/query').send({ query: 'q1', history: [], sessionId: 'unflag-me' });
+    await request(app).post('/api/chat/unflag-me/flag');
+
+    const unflag = await request(app).delete('/api/chat/unflag-me/flag');
+    expect(unflag.status).toBe(204);
+
+    const res = await request(app).get('/api/chat/unflag-me');
+    expect(res.body.flagged).toBe(false);
+  });
+
+  it('deleting a session also clears its flag', async () => {
+    await request(app).post('/api/ai/query').send({ query: 'q1', history: [], sessionId: 'flag-then-delete' });
+    await request(app).post('/api/chat/flag-then-delete/flag');
+
+    await request(app).delete('/api/chat/flag-then-delete');
+
+    // Re-create the session under the same id and confirm the old flag didn't linger.
+    await request(app).post('/api/ai/query').send({ query: 'q2', history: [], sessionId: 'flag-then-delete' });
+    const res = await request(app).get('/api/chat/flag-then-delete');
+    expect(res.body.flagged).toBe(false);
+  });
+});

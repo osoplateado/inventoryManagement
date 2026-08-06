@@ -64,4 +64,43 @@ describe('InventoryAgent', () => {
     const deleteCalls = global.fetch.mock.calls.filter(([, opts]) => opts?.method === 'DELETE');
     expect(deleteCalls).toHaveLength(0);
   });
+
+  it('flags the current session and disables the button afterward', async () => {
+    render(<InventoryAgent />);
+    const user = userEvent.setup();
+
+    await user.type(screen.getByPlaceholderText(/ask something like/i), 'something went wrong');
+    await user.click(screen.getByRole('button', { name: /ask/i }));
+    await waitFor(() => expect(screen.getByText('The answer.')).toBeInTheDocument());
+
+    const flagButton = screen.getByRole('button', { name: /flag issue/i });
+    await user.click(flagButton);
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /flagged/i })).toBeDisabled());
+
+    const sessionId = localStorage.getItem('inventoryAgentSessionId');
+    const flagCall = global.fetch.mock.calls.find(([url]) => url === `/api/chat/${sessionId}/flag`);
+    expect(flagCall).toBeTruthy();
+    expect(flagCall[1].method).toBe('POST');
+  });
+
+  it('New chat resets the flagged state for the new session', async () => {
+    render(<InventoryAgent />);
+    const user = userEvent.setup();
+
+    await user.type(screen.getByPlaceholderText(/ask something like/i), 'first question');
+    await user.click(screen.getByRole('button', { name: /ask/i }));
+    await waitFor(() => expect(screen.getByText('The answer.')).toBeInTheDocument());
+
+    await user.click(screen.getByRole('button', { name: /flag issue/i }));
+    await waitFor(() => expect(screen.getByRole('button', { name: /flagged/i })).toBeDisabled());
+
+    await user.click(screen.getByRole('button', { name: /new chat/i }));
+
+    await user.type(screen.getByPlaceholderText(/ask something like/i), 'second question');
+    await user.click(screen.getByRole('button', { name: /ask/i }));
+    await waitFor(() => expect(screen.getByText('The answer.')).toBeInTheDocument());
+
+    expect(screen.getByRole('button', { name: /flag issue/i })).toBeEnabled();
+  });
 });
