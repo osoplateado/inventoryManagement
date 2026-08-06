@@ -13,7 +13,8 @@
     "dev:all": "concurrently \"npm run dev\" \"npm run dev:server\"",
     "import-sql": "node import-sql.js",
     "delete-by-vendor": "node scripts/delete-by-vendor.js",
-    "normalize-locations": "node scripts/normalize-locations.js"
+    "normalize-locations": "node scripts/normalize-locations.js",
+    "fix-bare-locations": "node scripts/fix-bare-locations.js"
   },
   "dependencies": {
     "express": "^4.18.2",

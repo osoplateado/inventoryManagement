@@ -19,6 +19,18 @@ A simple shipping container inventory dashboard backed by Node and PostgreSQL.
 4. Run `npm start`.
 5. Open `http://localhost:3000` in your browser.
 
+## Local development
+
+Copy `.env.example` to `.env` in the project root and fill in real values — it's loaded automatically, no extra flags needed.
+
+Then start the frontend and backend together:
+
+```bash
+npm run dev:all
+```
+
+This runs Vite (frontend, `http://localhost:5173`) and the Node/Express API server (auto-restarts via nodemon) at the same time.
+
 ## Features
 
 - React frontend built with Vite

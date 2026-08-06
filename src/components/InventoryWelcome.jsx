@@ -18,6 +18,13 @@ function InventoryWelcome({ navigateTo }) {
         >
           View Inventory List
         </button>
+        <button
+          type="button"
+          className="button secondary"
+          onClick={() => navigateTo('/inventory/chats')}
+        >
+          View Chat History
+        </button>
       </div>
     </section>
   );

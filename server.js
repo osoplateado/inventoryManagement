@@ -174,6 +174,23 @@ async function initializeDatabase() {
     )
   `);
 
+  // Chat history, keyed by a per-browser session id (see sessionId in
+  // InventoryAgent.jsx) so conversations survive page reloads and — since
+  // this is a real table, not the app's local disk — Render restarts/deploys,
+  // which wipe anything written to the filesystem.
+  await runStatement(`
+    CREATE TABLE IF NOT EXISTS chat_messages (
+      id UUID PRIMARY KEY,
+      session_id TEXT NOT NULL,
+      role TEXT NOT NULL,
+      text TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+  `);
+  await runStatement(`
+    CREATE INDEX IF NOT EXISTS idx_chat_messages_session_id
+    ON chat_messages (session_id, created_at)
+  `);
 }
 
 // Capture raw body for fallback and debugging
@@ -254,6 +271,14 @@ app.post('/api/containers', async (req, res) => {
       ]
     );
 
+    // Geocode the location now so distance filtering works for this row
+    // without waiting for the next server restart's cache warm-up.
+    if (location) {
+      geocodeBatch([location]).catch(err =>
+        console.error('[POST /api/containers] geocoding location failed:', err.message)
+      );
+    }
+
     res.status(201).json({
       id,
       vendor,
@@ -328,6 +353,13 @@ app.put('/api/containers/:id', async (req, res) => {
 
     const changed = result.rowCount;
     if (changed === 0) return res.status(404).json({ error: 'Record not found' });
+
+    // Geocode in case the location was edited to something not already cached.
+    if (location) {
+      geocodeBatch([location]).catch(err =>
+        console.error('[PUT /api/containers] geocoding location failed:', err.message)
+      );
+    }
 
     res.json({
       id,
@@ -872,9 +904,73 @@ let lastDistanceFilter = null;
 
 const FOLLOW_UP_RE = /\b(that list|those|from (?:the|that)|same (?:area|location|list)|of (?:the|those|that))\b/i;
 
+// Persist a chat message; logs but doesn't throw so a DB hiccup never breaks
+// the actual AI response the user is waiting on.
+async function saveChatMessage(sessionId, role, text) {
+  if (!sessionId) return;
+  try {
+    await runStatement(
+      'INSERT INTO chat_messages (id, session_id, role, text) VALUES ($1, $2, $3, $4)',
+      [randomUUID(), sessionId, role, text]
+    );
+  } catch (err) {
+    console.error('[saveChatMessage] failed to persist message:', err.message);
+  }
+}
+
+// All conversations across every browser session, grouped and newest-first —
+// backs the standalone chat history page.
+app.get('/api/chat', async (req, res) => {
+  try {
+    const rows = await getRows(
+      'SELECT session_id, role, text, created_at FROM chat_messages ORDER BY created_at ASC'
+    );
+
+    const bySession = new Map();
+    for (const row of rows) {
+      if (!bySession.has(row.session_id)) bySession.set(row.session_id, []);
+      bySession.get(row.session_id).push({ role: row.role, text: row.text, createdAt: row.created_at });
+    }
+
+    const sessions = [...bySession.entries()]
+      .map(([sessionId, messages]) => ({
+        sessionId,
+        startedAt: messages[0].createdAt,
+        lastMessageAt: messages[messages.length - 1].createdAt,
+        messages,
+      }))
+      .sort((a, b) => new Date(b.lastMessageAt) - new Date(a.lastMessageAt));
+
+    res.json({ sessions });
+  } catch (err) {
+    handleDbError(res, err);
+  }
+});
+
+app.get('/api/chat/:sessionId', async (req, res) => {
+  try {
+    const rows = await getRows(
+      'SELECT role, text FROM chat_messages WHERE session_id = $1 ORDER BY created_at ASC',
+      [req.params.sessionId]
+    );
+    res.json({ messages: rows });
+  } catch (err) {
+    handleDbError(res, err);
+  }
+});
+
+app.delete('/api/chat/:sessionId', async (req, res) => {
+  try {
+    await runStatement('DELETE FROM chat_messages WHERE session_id = $1', [req.params.sessionId]);
+    res.status(204).end();
+  } catch (err) {
+    handleDbError(res, err);
+  }
+});
+
 app.post('/api/ai/query', async (req, res) => {
   try {
-    const { query, history } = req.body;
+    const { query, history, sessionId } = req.body;
     if (!query || typeof query !== 'string') return res.status(400).json({ error: 'Query text required' });
 
     console.log('AI query:', query);
@@ -932,6 +1028,12 @@ app.post('/api/ai/query', async (req, res) => {
     }
 
     const answer = await summarizeContainerResults(query, rows, history);
+
+    // Persist both sides of the exchange so the conversation survives a page
+    // reload or a server restart, not just the lifetime of the React state.
+    await saveChatMessage(sessionId, 'user', query);
+    await saveChatMessage(sessionId, 'assistant', answer);
+
     res.json({ answer });
   } catch (err) {
     console.error('AI query error:', err);
@@ -1113,6 +1215,15 @@ async function commitCSV(csvText) {
         ]
       );
       inserted.push(record);
+    }
+
+    // Geocode any newly-seen locations right away instead of waiting for the
+    // next server restart's warmGeocodeCache() run — otherwise distance
+    // filtering silently excludes rows at a location added since boot.
+    if (inserted.length > 0) {
+      geocodeBatch(inserted.map(r => r.location)).catch(err =>
+        console.error('[commitCSV] geocoding new locations failed:', err.message)
+      );
     }
 }
 

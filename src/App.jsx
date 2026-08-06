@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Route, Routes, useLocation, useNavigate } from 'react-router-dom';
+import ChatHistoryPage from './components/ChatHistoryPage';
 import CursorSnake from './components/CursorSnake';
 import Footer from './components/Footer';
 import Header from './components/Header';
@@ -24,6 +25,16 @@ const initialFormState = {
 };
 
 function formatDate(value) {
+  if (!value) return '';
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
+  if (match) {
+    const [, year, month, day] = match;
+    return new Date(Number(year), Number(month) - 1, Number(day)).toLocaleDateString(undefined, {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    });
+  }
   return new Date(value).toLocaleDateString(undefined, {
     year: 'numeric',
     month: 'short',
@@ -206,7 +217,7 @@ function App() {
       {page === 'home' && <CursorSnake />}
       <Header page={page} heroStyles={heroStyles} onHeroMove={handleHeroMove} onHeroLeave={handleHeroLeave} navigateTo={navigateTo} />
 
-      <main className={`container${location.pathname === '/inventory/list' ? ' full-width' : ''}`}>
+      <main className={`container${['/inventory/list', '/inventory/chats'].includes(location.pathname) ? ' full-width' : ''}`}>
         <Routes>
           <Route path="/" element={<HomePage navigateTo={navigateTo} />} />
           <Route path="/inventory" element={<InventoryWelcome navigateTo={navigateTo} />} />
@@ -226,6 +237,7 @@ function App() {
               />
             }
           />
+          <Route path="/inventory/chats" element={<ChatHistoryPage />} />
           <Route path="*" element={<HomePage navigateTo={navigateTo} />} />
         </Routes>
       </main>
